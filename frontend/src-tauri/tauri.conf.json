@@ -9,7 +9,6 @@
     "beforeBuildCommand": "npm run build"
   },
   "app": {
-    "title": "Regia",
     "windows": [
       {
         "title": "Regia - Document Intelligence",
@@ -23,7 +22,7 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; connect-src 'self' http://localhost:8420 http://127.0.0.1:8420; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self'"
+      "csp": "default-src 'self'; connect-src 'self' http://localhost:8420 http://127.0.0.1:8420 http://192.168.0.0/16:8420 http://*.local:8420; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self'"
     }
   },
   "bundle": {

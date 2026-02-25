@@ -4,8 +4,11 @@ use tauri::Manager;
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_http::init())
+        .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_os::init())
+        .plugin(tauri_plugin_notification::init())
         .setup(|app| {
-            // Start the Python backend server as a sidecar process
             let window = app.get_webview_window("main").unwrap();
             window.set_title("Regia - Document Intelligence").ok();
             Ok(())

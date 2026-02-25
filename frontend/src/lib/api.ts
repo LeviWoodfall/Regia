@@ -1,7 +1,23 @@
 import axios from 'axios';
 
+// Resolve API base URL:
+// 1. If VITE_API_URL env var is set (for mobile/LAN), use it
+// 2. If running inside Tauri or on a non-localhost domain, use current origin
+// 3. Otherwise use relative /api (dev proxy or same-origin production)
+function resolveBaseUrl(): string {
+  // Explicit override via env var or localStorage (mobile private cloud)
+  const envUrl = import.meta.env.VITE_API_URL;
+  if (envUrl) return envUrl.replace(/\/$/, '') + '/api';
+
+  const savedServer = localStorage.getItem('regia_server_url');
+  if (savedServer) return savedServer.replace(/\/$/, '') + '/api';
+
+  // If served from the backend (same origin), use relative path
+  return '/api';
+}
+
 const api = axios.create({
-  baseURL: '/api',
+  baseURL: resolveBaseUrl(),
   timeout: 30000,
   headers: { 'Content-Type': 'application/json' },
 });

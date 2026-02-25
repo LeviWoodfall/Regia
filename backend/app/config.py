@@ -169,8 +169,12 @@ class AppSettings(BaseSettings):
     app_name: str = "Regia"
     agent_name: str = "Reggie"
     debug: bool = False
-    host: str = "127.0.0.1"
+    host: str = "0.0.0.0"
     port: int = 8420
+    # Network discovery — allow LAN clients (mobile, other PCs) to connect
+    allow_lan_access: bool = True
+    # Path to built frontend for serving static files (None = auto-detect)
+    frontend_dist_dir: Optional[str] = None
     db_path: str = str(DEFAULT_DB_PATH)
     log_dir: str = str(DEFAULT_LOG_DIR)
     log_level: str = "INFO"

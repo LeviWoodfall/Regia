@@ -4,13 +4,15 @@ Main FastAPI application entry point.
 """
 
 import logging
+import socket
 import sys
 from pathlib import Path
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse, JSONResponse
 
 from app import __version__, __app_name__, __agent_name__
 from app.config import load_config, save_config, AppSettings, APP_DATA_DIR, DEFAULT_LOG_DIR
@@ -115,7 +117,18 @@ async def lifespan(app: FastAPI):
     app_state["ollama_manager"] = ollama_manager
     app_state["scheduler"] = scheduler
 
+    # Mount built frontend for serving
+    dist = _find_frontend_dist(settings)
+    if dist:
+        logger.info(f"Serving frontend from {dist}")
+        if (dist / "assets").exists():
+            app.mount("/assets", StaticFiles(directory=str(dist / "assets")), name="frontend-assets")
+        app_state["frontend_dist"] = dist
+    else:
+        logger.warning("Frontend dist not found — run 'npm run build' in frontend/")
+
     logger.info(f"{__app_name__} is ready at http://{settings.host}:{settings.port}")
+    logger.info(f"LAN access: http://{lan_ip}:{settings.port}")
 
     yield
 
@@ -136,10 +149,28 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# CORS for frontend
+# CORS — allow frontend dev server + any LAN client
+def _get_lan_ip() -> str:
+    """Get the machine's LAN IP address."""
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        ip = s.getsockname()[0]
+        s.close()
+        return ip
+    except Exception:
+        return "127.0.0.1"
+
+lan_ip = _get_lan_ip()
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost:3000", "http://127.0.0.1:5173"],
+    allow_origins=[
+        "http://localhost:5173", "http://localhost:3000", "http://127.0.0.1:5173",
+        "http://localhost:8420", "http://127.0.0.1:8420",
+        f"http://{lan_ip}:5173", f"http://{lan_ip}:8420",
+        "tauri://localhost",  # Tauri desktop app
+    ],
+    allow_origin_regex=r"http://192\.168\..*",  # Allow any 192.168.x.x LAN client
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -160,6 +191,44 @@ app.include_router(agent.router)
 app.include_router(files.router)
 app.include_router(cloud_routes.router)
 app.include_router(cloud_routes.oauth_router)
+
+
+# === Serve Built Frontend (fixes 404 on /) ===
+
+def _find_frontend_dist(settings=None) -> Path | None:
+    """Auto-detect the built frontend dist directory."""
+    if settings and settings.frontend_dist_dir:
+        p = Path(settings.frontend_dist_dir)
+        if p.exists() and (p / "index.html").exists():
+            return p
+    # Auto-detect: look relative to backend directory
+    backend_dir = Path(__file__).resolve().parent.parent
+    candidates = [
+        backend_dir.parent / "frontend" / "dist",
+        backend_dir / "frontend" / "dist",
+        Path.cwd().parent / "frontend" / "dist",
+        Path.cwd() / ".." / "frontend" / "dist",
+    ]
+    for c in candidates:
+        c = c.resolve()
+        if c.exists() and (c / "index.html").exists():
+            return c
+    return None
+
+
+# === Network Discovery Endpoint ===
+
+@app.get("/api/network/info")
+async def network_info():
+    """Return server network info for LAN client discovery."""
+    settings = app_state["settings"]
+    return {
+        "app": __app_name__,
+        "version": __version__,
+        "lan_ip": lan_ip,
+        "port": settings.port,
+        "url": f"http://{lan_ip}:{settings.port}",
+    }
 
 
 # === Root Routes ===
@@ -266,3 +335,32 @@ async def get_logs(
     logs = db.execute(query, tuple(params))
 
     return {"logs": logs, "total": total, "page": page, "page_size": page_size}
+
+
+# === SPA Catch-All (must be last) ===
+
+@app.get("/{full_path:path}")
+async def serve_spa(request: Request, full_path: str):
+    """Serve the frontend SPA for any non-API route."""
+    # Skip API routes (already handled above)
+    if full_path.startswith("api/"):
+        return JSONResponse({"detail": "Not Found"}, status_code=404)
+
+    dist = app_state.get("frontend_dist")
+    if not dist:
+        return JSONResponse(
+            {"detail": "Frontend not built. Run 'npm run build' in frontend/"},
+            status_code=503,
+        )
+
+    # Try to serve the exact file first (e.g., favicon.ico, regia.svg)
+    file_path = dist / full_path
+    if full_path and file_path.exists() and file_path.is_file():
+        return FileResponse(str(file_path))
+
+    # Otherwise serve index.html for SPA client-side routing
+    index = dist / "index.html"
+    if index.exists():
+        return FileResponse(str(index))
+
+    return JSONResponse({"detail": "Not Found"}, status_code=404)
