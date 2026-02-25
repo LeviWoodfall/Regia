@@ -1,0 +1,68 @@
+@import "tailwindcss";
+
+/* === Regia Warm Sunset Theme === */
+@theme {
+  --color-sunset-50: #fef7f0;
+  --color-sunset-100: #fdebd6;
+  --color-sunset-200: #fad4ab;
+  --color-sunset-300: #f6b676;
+  --color-sunset-400: #f09040;
+  --color-sunset-500: #ec7520;
+  --color-sunset-600: #dd5b16;
+  --color-sunset-700: #b74414;
+  --color-sunset-800: #923718;
+  --color-sunset-900: #763016;
+  --color-sunset-950: #401609;
+
+  --color-warm-50: #fdf8f3;
+  --color-warm-100: #f9ede0;
+  --color-warm-200: #f2d7be;
+  --color-warm-300: #e9bb93;
+  --color-warm-400: #de9666;
+  --color-warm-500: #d67a47;
+  --color-warm-600: #c8643c;
+  --color-warm-700: #a64f33;
+  --color-warm-800: #86412f;
+  --color-warm-900: #6d3829;
+  --color-warm-950: #3a1b13;
+
+  --color-sand-50: #faf8f5;
+  --color-sand-100: #f3efe8;
+  --color-sand-200: #e6ddd0;
+  --color-sand-300: #d5c5b0;
+  --color-sand-400: #c2a88e;
+  --color-sand-500: #b49276;
+  --color-sand-600: #a7806a;
+  --color-sand-700: #8b6a59;
+  --color-sand-800: #72574b;
+  --color-sand-900: #5e4940;
+  --color-sand-950: #322521;
+}
+
+/* === Base Styles === */
+
+body {
+  margin: 0;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  background-color: var(--color-warm-50);
+  color: var(--color-warm-950);
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Scrollbar styling for warm theme */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: var(--color-sand-100);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-sand-400);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-sand-500);
+}

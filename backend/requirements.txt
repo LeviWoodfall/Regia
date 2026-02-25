@@ -1,0 +1,25 @@
+# Regia - Backend Dependencies
+# Core
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+pydantic==2.10.4
+pydantic-settings==2.7.1
+
+# HTTP Client
+httpx==0.28.1
+
+# PDF Processing
+PyMuPDF==1.25.3
+
+# OCR
+pytesseract==0.3.13
+Pillow==11.1.0
+
+# Encryption
+cryptography==44.0.0
+
+# Scheduling
+APScheduler==3.10.4
+
+# Database (SQLite is built-in, but we need aiosqlite for async)
+aiosqlite==0.20.0
