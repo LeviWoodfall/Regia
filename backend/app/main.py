@@ -23,6 +23,8 @@ from app.llm.ollama_manager import OllamaManager
 from app.scheduler.jobs import EmailScheduler
 from app.auth import AuthManager
 from app.cloud_storage.sync import CloudSyncEngine
+from app.rules.engine import EmailRulesEngine, seed_default_rules
+from app.cloud_mode import PersonalCloudManager
 
 # === Logging Setup ===
 
@@ -98,6 +100,13 @@ async def lifespan(app: FastAPI):
     # Initialize cloud sync engine
     cloud_sync = CloudSyncEngine(db)
 
+    # Initialize email rules engine
+    rules_engine = EmailRulesEngine(db)
+    seed_default_rules(db)
+
+    # Initialize personal cloud manager
+    cloud_manager = PersonalCloudManager()
+
     # Initialize scheduler
     scheduler = EmailScheduler(db, settings)
     if settings.scheduler.enabled:
@@ -116,6 +125,8 @@ async def lifespan(app: FastAPI):
     app_state["cloud_sync"] = cloud_sync
     app_state["ollama_manager"] = ollama_manager
     app_state["scheduler"] = scheduler
+    app_state["rules_engine"] = rules_engine
+    app_state["cloud_manager"] = cloud_manager
 
     # Mount built frontend for serving
     dist = _find_frontend_dist(settings)
@@ -181,6 +192,7 @@ app.add_middleware(
 from app.routes import settings, emails, documents, search, agent, files  # noqa: E402
 from app.routes import auth as auth_routes  # noqa: E402
 from app.routes import cloud_storage as cloud_routes  # noqa: E402
+from app.routes import rules as rules_routes  # noqa: E402
 
 app.include_router(auth_routes.router)
 app.include_router(settings.router)
@@ -191,6 +203,7 @@ app.include_router(agent.router)
 app.include_router(files.router)
 app.include_router(cloud_routes.router)
 app.include_router(cloud_routes.oauth_router)
+app.include_router(rules_routes.router)
 
 
 # === Serve Built Frontend (fixes 404 on /) ===
@@ -229,6 +242,34 @@ async def network_info():
         "port": settings.port,
         "url": f"http://{lan_ip}:{settings.port}",
     }
+
+
+@app.get("/api/cloud-mode")
+async def cloud_mode_status():
+    """Get personal cloud mode status (Tailscale, WireGuard, LAN)."""
+    cloud_mgr = app_state.get("cloud_manager")
+    if not cloud_mgr:
+        return {"error": "Cloud manager not initialized"}
+    settings = app_state["settings"]
+    return cloud_mgr.get_cloud_info(port=settings.port)
+
+
+@app.get("/api/cloud-mode/tailscale")
+async def tailscale_status():
+    """Get detailed Tailscale status."""
+    cloud_mgr = app_state.get("cloud_manager")
+    if not cloud_mgr:
+        return {"installed": False}
+    return cloud_mgr.get_tailscale_status()
+
+
+@app.get("/api/cloud-mode/wireguard")
+async def wireguard_status():
+    """Get WireGuard status."""
+    cloud_mgr = app_state.get("cloud_manager")
+    if not cloud_mgr:
+        return {"installed": False}
+    return cloud_mgr.get_wireguard_status()
 
 
 # === Root Routes ===

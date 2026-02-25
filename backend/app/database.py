@@ -187,6 +187,21 @@ CREATE TABLE IF NOT EXISTS sessions (
     expires_at TEXT NOT NULL
 );
 
+-- Email rules for auto-labeling and processing
+CREATE TABLE IF NOT EXISTS email_rules (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL DEFAULT '',
+    enabled INTEGER NOT NULL DEFAULT 1,
+    priority INTEGER NOT NULL DEFAULT 0,
+    -- Conditions (JSON): {"field": "sender_email", "operator": "contains", "value": "amazon"}
+    conditions TEXT NOT NULL DEFAULT '[]',
+    -- Actions (JSON): {"action": "label", "value": "shopping"}
+    actions TEXT NOT NULL DEFAULT '[]',
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    match_count INTEGER NOT NULL DEFAULT 0
+);
+
 -- Password reset tokens
 CREATE TABLE IF NOT EXISTS password_reset_tokens (
     token TEXT PRIMARY KEY,

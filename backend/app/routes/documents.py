@@ -10,6 +10,7 @@ from typing import Optional
 
 from app.models import DocumentResponse, DocumentListResponse
 from app.processing.pdf_handler import render_pdf_page
+from app.processing.doc_handler import render_image_preview, detect_file_type
 from app.security import hash_file, verify_file_hash
 
 router = APIRouter(prefix="/api/documents", tags=["documents"])
@@ -140,7 +141,7 @@ async def preview_document(
     dpi: int = Query(150, ge=72, le=300),
     db=Depends(get_db),
 ):
-    """Get a PNG preview of a document page."""
+    """Get a PNG preview of a document page (PDF or image)."""
     rows = db.execute("SELECT * FROM documents WHERE id = ?", (document_id,))
     if not rows:
         raise HTTPException(404, "Document not found")
@@ -151,9 +152,15 @@ async def preview_document(
     if not os.path.exists(filepath):
         raise HTTPException(404, "File not found on disk")
 
-    png_bytes = render_pdf_page(filepath, page_number=page, dpi=dpi)
+    file_type = detect_file_type(doc["original_filename"], doc.get("mime_type", ""))
+
+    if file_type == "image":
+        png_bytes = render_image_preview(filepath)
+    else:
+        png_bytes = render_pdf_page(filepath, page_number=page, dpi=dpi)
+
     if not png_bytes:
-        raise HTTPException(404, "Could not render page")
+        raise HTTPException(404, "Could not render preview")
 
     return Response(content=png_bytes, media_type="image/png")
 

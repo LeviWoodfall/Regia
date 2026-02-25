@@ -115,4 +115,17 @@ export const getDirectoryTree = (maxDepth = 3) =>
 // === Logs ===
 export const getLogs = (params?: any) => api.get('/logs', { params });
 
+// === Email Rules ===
+export const getRules = () => api.get('/rules');
+export const createRule = (data: any) => api.post('/rules', data);
+export const updateRule = (id: number, data: any) => api.put(`/rules/${id}`, data);
+export const deleteRule = (id: number) => api.delete(`/rules/${id}`);
+export const getRuleFields = () => api.get('/rules/fields');
+export const testRules = (emailData: any) => api.post('/rules/test', emailData);
+
+// === Personal Cloud Mode ===
+export const getCloudMode = () => api.get('/cloud-mode');
+export const getTailscaleStatus = () => api.get('/cloud-mode/tailscale');
+export const getWireguardStatus = () => api.get('/cloud-mode/wireguard');
+
 export default api;

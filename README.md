@@ -15,15 +15,17 @@ The built-in AI assistant **Reggie** can search across your entire document arch
 - **"Connect with Microsoft/Google" OAuth2** — Secure one-click sign-in for email and cloud storage
 - **Cloud Storage Sync** — Automatically sync documents to OneDrive or Google Drive
 - **One-Way Data Flow** — Emails are pulled read-only; no write-back access to your accounts
-- **PDF Processing** — Extract text, OCR scanned documents, compute SHA-256 integrity hashes
+- **Multi-Format Document Processing** — PDF, DOCX, XLSX, and images (JPG, PNG, TIFF, BMP, GIF, WEBP)
 - **Invoice Link Detection** — Automatically detects and downloads invoices from email links
 - **Structured Storage** — Documents stored as `{email}/{date}/{sender}/{subject}/filename`
 - **Full-Text Search** — SQLite FTS5 across emails, documents, OCR text, and AI summaries
 - **Configurable Scheduler** — Control polling frequency, post-processing, and retry behavior
 - **Detailed Logging** — Full audit trail with hash verification for every document
 
-### AI
+### AI & Rules
 - **Lightweight LLM Classification** — Uses Ollama with ultra-light models (Qwen2.5:0.5b, TinyLlama) with rule-based fallback
+- **Email Rules Engine** — Condition-based auto-labeling, classification, and processing of incoming emails
+- **Default Rules** — Ships with 5 built-in rules for invoices, receipts, shipping, contracts, and newsletters
 - **Fully Offline AI** — Reggie is trained on your data only, never connects to the internet
 - **Auto-Start AI Engine** — Ollama starts automatically with the server, model pulled on first run
 - **Reggie AI Agent** — Conversational search assistant using RAG over your document archive
@@ -36,6 +38,7 @@ The built-in AI assistant **Reggie** can search across your entire document arch
 
 ### Desktop & Network
 - **Standalone Desktop App** — Runs as a native desktop app via Tauri v2 (Windows, Linux, macOS)
+- **Personal Cloud Mode** — Secure remote access via Tailscale or WireGuard mesh networks
 - **Network Discoverable** — Backend binds to `0.0.0.0` with CORS for LAN access; `/api/network/info` endpoint
 - **Private Cloud** — Mobile/LAN clients connect to the main server instance via configurable API URL
 - **Dark Mode** — Warm, darker version of the light theme, soft on the eyes in dark rooms
@@ -51,10 +54,11 @@ The built-in AI assistant **Reggie** can search across your entire document arch
 | Frontend | React 19, TypeScript, TailwindCSS v4, Vite |
 | Desktop | Tauri v2 (Rust) — native app with shell, http, process, os, notification plugins |
 | LLM | Ollama (local only), Qwen2.5:0.5b default |
-| PDF | PyMuPDF |
+| Documents | PyMuPDF (PDF), python-docx (DOCX), openpyxl (XLSX), Pillow (images) |
 | OCR | Tesseract via pytesseract |
 | Email | IMAP with OAuth2 (PKCE), SMTP for password reset |
 | Cloud | OneDrive (Microsoft Graph), Google Drive API |
+| Network | Tailscale, WireGuard (personal cloud mode) |
 | Security | Fernet (AES-128-CBC), PBKDF2 (480k iterations), session auth, CORS |
 | Scheduler | APScheduler |
 | Icons | Lucide React |
@@ -221,12 +225,14 @@ Key endpoints:
 
 ## Roadmap
 
-- [ ] Personal cloud mode (Tailscale integration)
 - [ ] Mobile-optimized PWA
-- [x] Multi-user support (v0.2.1)
-- [ ] Additional document types (images, DOCX, XLSX)
-- [ ] Email rules and auto-labeling
 - [ ] Export and backup tools
+- [ ] Email forwarding / auto-reply rules
+- [ ] Scheduled reports and digest emails
+- [x] Multi-user support (v0.2.1)
+- [x] Additional document types — DOCX, XLSX, images (v0.3.0)
+- [x] Email rules and auto-labeling (v0.3.0)
+- [x] Personal cloud mode — Tailscale + WireGuard (v0.3.0)
 - [x] Desktop packaging — Tauri v2 (v0.2.0)
 - [x] Dark mode (v0.2.0)
 - [x] Cloud storage sync — OneDrive + Google Drive (v0.2.0)

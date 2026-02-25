@@ -2,12 +2,15 @@ import { useEffect, useState } from 'react';
 import {
   Shield, Lock, Unlock, Mail, Plus, Trash2, Save, Eye, EyeOff,
   Brain, Clock, FolderOpen, Cloud, ExternalLink, Link2,
+  ListFilter, Globe, Wifi, ChevronDown, ChevronUp, ToggleLeft, ToggleRight,
 } from 'lucide-react';
 import {
   getStatus, setupMasterPassword, unlock as apiUnlock, lock as apiLock,
   getAccounts, addAccount, deleteAccount, storeCredentials, getConfig, updateConfig,
   getCloudProviders, getCloudConnections, createCloudConnection, deleteCloudConnection,
   startOAuth2Flow, getEmailProviders,
+  getRules, createRule, updateRule, deleteRule, getRuleFields,
+  getCloudMode,
 } from '../lib/api';
 
 export default function SettingsPage() {
@@ -34,6 +37,20 @@ export default function SettingsPage() {
   const [cloudProviders, setCloudProviders] = useState<any[]>([]);
   const [cloudConnections, setCloudConnections] = useState<any[]>([]);
   const [emailProviders, setEmailProviders] = useState<any[]>([]);
+
+  // Email rules
+  const [rules, setRules] = useState<any[]>([]);
+  const [ruleFields, setRuleFields] = useState<any>(null);
+  const [showAddRule, setShowAddRule] = useState(false);
+  const [expandedRule, setExpandedRule] = useState<number | null>(null);
+  const [newRule, setNewRule] = useState({
+    name: '', priority: 5, enabled: true,
+    conditions: [{ field: 'subject', operator: 'contains', value: '' }],
+    actions: [{ action: 'label', value: '' }],
+  });
+
+  // Cloud mode
+  const [cloudModeInfo, setCloudModeInfo] = useState<any>(null);
 
   const loadStatus = async () => {
     try {
@@ -71,11 +88,28 @@ export default function SettingsPage() {
     } catch { /* ignore */ }
   };
 
+  const loadRules = async () => {
+    try {
+      const [rulesResp, fieldsResp] = await Promise.all([getRules(), getRuleFields()]);
+      setRules(rulesResp.data.rules || []);
+      setRuleFields(fieldsResp.data);
+    } catch { /* ignore */ }
+  };
+
+  const loadCloudMode = async () => {
+    try {
+      const resp = await getCloudMode();
+      setCloudModeInfo(resp.data);
+    } catch { /* ignore */ }
+  };
+
   useEffect(() => {
     loadStatus();
     loadAccounts();
     loadConfig();
     loadCloudData();
+    loadRules();
+    loadCloudMode();
   }, []);
 
   const handleConnectCloud = async (provider: string) => {
@@ -188,10 +222,41 @@ export default function SettingsPage() {
     }
   };
 
+  const handleCreateRule = async () => {
+    try {
+      await createRule(newRule);
+      setShowAddRule(false);
+      setNewRule({
+        name: '', priority: 5, enabled: true,
+        conditions: [{ field: 'subject', operator: 'contains', value: '' }],
+        actions: [{ action: 'label', value: '' }],
+      });
+      setMessage('Rule created');
+      loadRules();
+    } catch { setMessage('Failed to create rule'); }
+  };
+
+  const handleToggleRule = async (rule: any) => {
+    try {
+      await updateRule(rule.id, { enabled: !rule.enabled });
+      loadRules();
+    } catch { /* ignore */ }
+  };
+
+  const handleDeleteRule = async (id: number) => {
+    try {
+      await deleteRule(id);
+      setMessage('Rule deleted');
+      loadRules();
+    } catch { /* ignore */ }
+  };
+
   const tabs = [
     { id: 'security', label: 'Security', icon: Shield },
     { id: 'accounts', label: 'Email Accounts', icon: Mail },
+    { id: 'rules', label: 'Email Rules', icon: ListFilter },
     { id: 'cloud', label: 'Cloud Storage', icon: Cloud },
+    { id: 'cloudmode', label: 'Cloud Mode', icon: Globe },
     { id: 'llm', label: 'LLM / AI', icon: Brain },
     { id: 'storage', label: 'Storage', icon: FolderOpen },
     { id: 'scheduler', label: 'Scheduler', icon: Clock },
@@ -610,6 +675,315 @@ export default function SettingsPage() {
                 </button>
               </div>
             </div>
+          </div>
+        )}
+
+        {/* === Email Rules Tab === */}
+        {tab === 'rules' && (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-semibold text-warm-900 flex items-center gap-2">
+                  <ListFilter className="w-5 h-5 text-sunset-500" /> Email Rules
+                </h3>
+                <p className="text-sm text-sand-500 mt-0.5">Auto-label and classify incoming emails based on conditions</p>
+              </div>
+              <button onClick={() => setShowAddRule(!showAddRule)}
+                className="flex items-center gap-1.5 px-3 py-2 bg-sunset-500 text-white rounded-xl text-xs font-medium hover:bg-sunset-600 transition-colors">
+                <Plus className="w-3.5 h-3.5" /> Add Rule
+              </button>
+            </div>
+
+            {/* Add Rule Form */}
+            {showAddRule && (
+              <div className="bg-sand-50 rounded-xl p-4 border border-sand-200 space-y-3">
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs font-medium text-sand-600 mb-1 block">Rule Name</label>
+                    <input type="text" placeholder="e.g. Amazon Receipts"
+                      value={newRule.name} onChange={e => setNewRule({...newRule, name: e.target.value})}
+                      className="w-full px-3 py-2 bg-white border border-sand-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-sunset-400/40" />
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium text-sand-600 mb-1 block">Priority (0-10)</label>
+                    <input type="number" min={0} max={10}
+                      value={newRule.priority} onChange={e => setNewRule({...newRule, priority: parseInt(e.target.value) || 0})}
+                      className="w-full px-3 py-2 bg-white border border-sand-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-sunset-400/40" />
+                  </div>
+                </div>
+
+                {/* Conditions */}
+                <div>
+                  <label className="text-xs font-medium text-sand-600 mb-1.5 block">Conditions (all must match)</label>
+                  {newRule.conditions.map((cond, i) => (
+                    <div key={i} className="flex gap-2 mb-2">
+                      <select value={cond.field} onChange={e => {
+                        const c = [...newRule.conditions]; c[i] = {...c[i], field: e.target.value};
+                        setNewRule({...newRule, conditions: c});
+                      }} className="px-2 py-1.5 bg-white border border-sand-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-sunset-400/40">
+                        {ruleFields?.fields?.map((f: any) => <option key={f.id} value={f.id}>{f.label}</option>)}
+                      </select>
+                      <select value={cond.operator} onChange={e => {
+                        const c = [...newRule.conditions]; c[i] = {...c[i], operator: e.target.value};
+                        setNewRule({...newRule, conditions: c});
+                      }} className="px-2 py-1.5 bg-white border border-sand-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-sunset-400/40">
+                        {ruleFields?.operators?.map((o: string) => <option key={o} value={o}>{o.replace(/_/g, ' ')}</option>)}
+                      </select>
+                      <input type="text" placeholder="Value" value={cond.value}
+                        onChange={e => {
+                          const c = [...newRule.conditions]; c[i] = {...c[i], value: e.target.value};
+                          setNewRule({...newRule, conditions: c});
+                        }}
+                        className="flex-1 px-2 py-1.5 bg-white border border-sand-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-sunset-400/40" />
+                      {newRule.conditions.length > 1 && (
+                        <button onClick={() => setNewRule({...newRule, conditions: newRule.conditions.filter((_, j) => j !== i)})}
+                          className="text-red-400 hover:text-red-600"><Trash2 className="w-3.5 h-3.5" /></button>
+                      )}
+                    </div>
+                  ))}
+                  <button onClick={() => setNewRule({...newRule, conditions: [...newRule.conditions, { field: 'subject', operator: 'contains', value: '' }]})}
+                    className="text-xs text-sunset-600 hover:text-sunset-700 font-medium">+ Add condition</button>
+                </div>
+
+                {/* Actions */}
+                <div>
+                  <label className="text-xs font-medium text-sand-600 mb-1.5 block">Actions</label>
+                  {newRule.actions.map((act, i) => (
+                    <div key={i} className="flex gap-2 mb-2">
+                      <select value={act.action} onChange={e => {
+                        const a = [...newRule.actions]; a[i] = {...a[i], action: e.target.value};
+                        setNewRule({...newRule, actions: a});
+                      }} className="px-2 py-1.5 bg-white border border-sand-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-sunset-400/40">
+                        {ruleFields?.action_types?.map((a: any) => <option key={a.id} value={a.id}>{a.label}</option>)}
+                      </select>
+                      <input type="text" placeholder="Value" value={act.value}
+                        onChange={e => {
+                          const a = [...newRule.actions]; a[i] = {...a[i], value: e.target.value};
+                          setNewRule({...newRule, actions: a});
+                        }}
+                        className="flex-1 px-2 py-1.5 bg-white border border-sand-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-sunset-400/40" />
+                      {newRule.actions.length > 1 && (
+                        <button onClick={() => setNewRule({...newRule, actions: newRule.actions.filter((_, j) => j !== i)})}
+                          className="text-red-400 hover:text-red-600"><Trash2 className="w-3.5 h-3.5" /></button>
+                      )}
+                    </div>
+                  ))}
+                  <button onClick={() => setNewRule({...newRule, actions: [...newRule.actions, { action: 'label', value: '' }]})}
+                    className="text-xs text-sunset-600 hover:text-sunset-700 font-medium">+ Add action</button>
+                </div>
+
+                <div className="flex gap-2 pt-1">
+                  <button onClick={handleCreateRule}
+                    className="px-4 py-2 bg-sunset-500 text-white rounded-lg text-xs font-medium hover:bg-sunset-600 transition-colors">
+                    Create Rule
+                  </button>
+                  <button onClick={() => setShowAddRule(false)}
+                    className="px-4 py-2 bg-sand-100 text-sand-600 rounded-lg text-xs font-medium hover:bg-sand-200 transition-colors">
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Rules List */}
+            {rules.length === 0 ? (
+              <div className="text-center py-8 text-sand-400">
+                <ListFilter className="w-10 h-10 mx-auto mb-2 text-sand-300" />
+                <p className="text-sm">No email rules configured</p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {rules.map((rule: any) => (
+                  <div key={rule.id} className="bg-sand-50 rounded-xl border border-sand-200 overflow-hidden">
+                    <div className="flex items-center justify-between px-4 py-3">
+                      <div className="flex items-center gap-3 flex-1 min-w-0">
+                        <button onClick={() => handleToggleRule(rule)} title={rule.enabled ? 'Disable' : 'Enable'}>
+                          {rule.enabled
+                            ? <ToggleRight className="w-5 h-5 text-green-500" />
+                            : <ToggleLeft className="w-5 h-5 text-sand-400" />}
+                        </button>
+                        <div className="min-w-0">
+                          <p className={`text-sm font-medium truncate ${rule.enabled ? 'text-warm-900' : 'text-sand-400'}`}>
+                            {rule.name || 'Unnamed Rule'}
+                          </p>
+                          <p className="text-[11px] text-sand-500">
+                            {rule.conditions?.length || 0} condition{rule.conditions?.length !== 1 ? 's' : ''}
+                            {' \u00B7 '}{rule.actions?.length || 0} action{rule.actions?.length !== 1 ? 's' : ''}
+                            {rule.match_count > 0 && ` \u00B7 ${rule.match_count} matches`}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="px-2 py-0.5 bg-sand-200 text-sand-600 rounded text-[10px] font-medium">
+                          P{rule.priority}
+                        </span>
+                        <button onClick={() => setExpandedRule(expandedRule === rule.id ? null : rule.id)}
+                          className="p-1 rounded hover:bg-sand-200 text-sand-400">
+                          {expandedRule === rule.id ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                        </button>
+                        <button onClick={() => handleDeleteRule(rule.id)}
+                          className="p-1 rounded hover:bg-red-100 text-sand-400 hover:text-red-500">
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                    {expandedRule === rule.id && (
+                      <div className="px-4 pb-3 border-t border-sand-200 pt-2 space-y-2">
+                        <div>
+                          <p className="text-[11px] font-medium text-sand-500 mb-1">Conditions:</p>
+                          {rule.conditions?.map((c: any, i: number) => (
+                            <p key={i} className="text-xs text-warm-700 pl-2">
+                              <span className="font-medium">{c.field}</span> {c.operator.replace(/_/g, ' ')} <span className="text-sunset-600">"{c.value}"</span>
+                            </p>
+                          ))}
+                        </div>
+                        <div>
+                          <p className="text-[11px] font-medium text-sand-500 mb-1">Actions:</p>
+                          {rule.actions?.map((a: any, i: number) => (
+                            <p key={i} className="text-xs text-warm-700 pl-2">
+                              <span className="font-medium">{a.action}</span> → <span className="text-sunset-600">"{a.value}"</span>
+                            </p>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* === Cloud Mode Tab === */}
+        {tab === 'cloudmode' && (
+          <div className="space-y-6">
+            <div>
+              <h3 className="text-lg font-semibold text-warm-900 flex items-center gap-2">
+                <Globe className="w-5 h-5 text-sunset-500" /> Personal Cloud Mode
+              </h3>
+              <p className="text-sm text-sand-500 mt-1">
+                Access Regia securely from anywhere using Tailscale or WireGuard
+              </p>
+            </div>
+
+            {cloudModeInfo ? (
+              <div className="space-y-4">
+                {/* LAN Access */}
+                <div className="bg-sand-50 rounded-xl border border-sand-200 p-4">
+                  <div className="flex items-center gap-3 mb-2">
+                    <div className="w-8 h-8 rounded-lg bg-green-100 flex items-center justify-center">
+                      <Wifi className="w-4 h-4 text-green-600" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-warm-900">Local Network (LAN)</p>
+                      <p className="text-[11px] text-sand-500">Available on your local network</p>
+                    </div>
+                    <span className="ml-auto px-2 py-0.5 rounded-full text-[10px] font-medium bg-green-100 text-green-700">Active</span>
+                  </div>
+                  <div className="mt-2 px-3 py-2 bg-white rounded-lg border border-sand-200 text-sm font-mono text-warm-800">
+                    {cloudModeInfo.lan?.url}
+                  </div>
+                </div>
+
+                {/* Tailscale */}
+                <div className="bg-sand-50 rounded-xl border border-sand-200 p-4">
+                  <div className="flex items-center gap-3 mb-2">
+                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
+                      cloudModeInfo.tailscale ? 'bg-blue-100' : 'bg-sand-200'
+                    }`}>
+                      <Globe className={`w-4 h-4 ${cloudModeInfo.tailscale ? 'text-blue-600' : 'text-sand-400'}`} />
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-warm-900">Tailscale</p>
+                      <p className="text-[11px] text-sand-500">
+                        {cloudModeInfo.tailscale ? `Connected · ${cloudModeInfo.tailscale.hostname}` : 'Not detected — install Tailscale for secure remote access'}
+                      </p>
+                    </div>
+                    <span className={`ml-auto px-2 py-0.5 rounded-full text-[10px] font-medium ${
+                      cloudModeInfo.tailscale ? 'bg-blue-100 text-blue-700' : 'bg-sand-200 text-sand-500'
+                    }`}>
+                      {cloudModeInfo.tailscale ? 'Connected' : 'Not installed'}
+                    </span>
+                  </div>
+                  {cloudModeInfo.tailscale && (
+                    <>
+                      <div className="mt-2 px-3 py-2 bg-white rounded-lg border border-sand-200 text-sm font-mono text-warm-800">
+                        {cloudModeInfo.tailscale.url}
+                      </div>
+                      {cloudModeInfo.tailscale.dns_name && (
+                        <p className="text-[11px] text-sand-500 mt-1.5">
+                          DNS: <span className="font-mono">{cloudModeInfo.tailscale.dns_name}</span>
+                          {cloudModeInfo.tailscale.tailnet && ` · Tailnet: ${cloudModeInfo.tailscale.tailnet}`}
+                        </p>
+                      )}
+                      {cloudModeInfo.tailscale.peers?.length > 0 && (
+                        <div className="mt-3">
+                          <p className="text-[11px] font-medium text-sand-500 mb-1">Peers ({cloudModeInfo.tailscale.peers.length}):</p>
+                          <div className="space-y-1">
+                            {cloudModeInfo.tailscale.peers.map((p: any, i: number) => (
+                              <div key={i} className="flex items-center gap-2 text-xs text-warm-700">
+                                <span className={`w-1.5 h-1.5 rounded-full ${p.online ? 'bg-green-500' : 'bg-sand-400'}`} />
+                                <span className="font-medium">{p.hostname}</span>
+                                <span className="text-sand-400 font-mono">{p.ip}</span>
+                                <span className="text-sand-400">{p.os}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  )}
+                  {!cloudModeInfo.tailscale && (
+                    <div className="mt-2">
+                      <a href="https://tailscale.com/download" target="_blank" rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1.5 text-xs text-sunset-600 hover:text-sunset-700 font-medium">
+                        <ExternalLink className="w-3.5 h-3.5" /> Install Tailscale
+                      </a>
+                    </div>
+                  )}
+                </div>
+
+                {/* WireGuard */}
+                <div className="bg-sand-50 rounded-xl border border-sand-200 p-4">
+                  <div className="flex items-center gap-3">
+                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
+                      cloudModeInfo.wireguard?.active ? 'bg-purple-100' : 'bg-sand-200'
+                    }`}>
+                      <Shield className={`w-4 h-4 ${cloudModeInfo.wireguard?.active ? 'text-purple-600' : 'text-sand-400'}`} />
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-warm-900">WireGuard</p>
+                      <p className="text-[11px] text-sand-500">
+                        {cloudModeInfo.wireguard?.active
+                          ? `Active · ${cloudModeInfo.wireguard.interfaces?.length || 0} interface(s)`
+                          : 'Not detected — install WireGuard for manual VPN tunnels'}
+                      </p>
+                    </div>
+                    <span className={`ml-auto px-2 py-0.5 rounded-full text-[10px] font-medium ${
+                      cloudModeInfo.wireguard?.active ? 'bg-purple-100 text-purple-700' : 'bg-sand-200 text-sand-500'
+                    }`}>
+                      {cloudModeInfo.wireguard?.active ? 'Active' : 'Not active'}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Recommended URL */}
+                <div className="bg-sunset-50 rounded-xl border border-sunset-200 p-4">
+                  <p className="text-xs font-medium text-sunset-700 mb-1.5">Recommended Access URL</p>
+                  <div className="px-3 py-2 bg-white rounded-lg border border-sunset-200 text-sm font-mono text-warm-900 font-semibold">
+                    {cloudModeInfo.recommended_url}
+                  </div>
+                  <p className="text-[11px] text-sunset-500 mt-1.5">
+                    Use this URL from mobile or remote devices to connect to Regia
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <div className="text-center py-8 text-sand-400">
+                <Globe className="w-10 h-10 mx-auto mb-2 text-sand-300" />
+                <p className="text-sm">Loading cloud mode status...</p>
+              </div>
+            )}
           </div>
         )}
 

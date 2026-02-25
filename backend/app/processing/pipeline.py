@@ -17,6 +17,12 @@ from app.email_engine.parser import ParsedEmail, Attachment
 from app.processing.pdf_handler import extract_pdf_text, get_pdf_page_count
 from app.processing.ocr import ocr_pdf
 from app.processing.invoice import download_invoice_from_link
+from app.processing.doc_handler import (
+    detect_file_type,
+    extract_docx_text, get_docx_page_count,
+    extract_xlsx_text, get_xlsx_sheet_count,
+    extract_image_text, get_image_metadata,
+)
 
 logger = logging.getLogger("regia.processing.pipeline")
 
@@ -146,19 +152,37 @@ class ProcessingPipeline:
         # Compute hash
         file_hash = hash_file(str(stored_path))
 
-        # Get PDF metadata
+        # Detect file type and extract text accordingly
+        file_type = detect_file_type(attachment.filename, attachment.content_type)
         page_count = 0
         ocr_text = ""
-        if attachment.content_type == "application/pdf" or attachment.filename.lower().endswith(".pdf"):
-            try:
+
+        try:
+            if file_type == "pdf":
                 page_count = get_pdf_page_count(str(stored_path))
-                # Try embedded text first
                 ocr_text = extract_pdf_text(str(stored_path))
-                # Fall back to OCR if no embedded text
                 if not ocr_text.strip() and self.settings.ocr.enabled:
                     ocr_text = ocr_pdf(str(stored_path), self.settings.ocr)
-            except Exception as e:
-                logger.warning(f"PDF processing error for {attachment.filename}: {e}")
+
+            elif file_type == "docx":
+                ocr_text = extract_docx_text(str(stored_path))
+                page_count = get_docx_page_count(str(stored_path))
+
+            elif file_type == "xlsx":
+                ocr_text = extract_xlsx_text(str(stored_path))
+                page_count = get_xlsx_sheet_count(str(stored_path))
+
+            elif file_type == "image":
+                if self.settings.ocr.enabled:
+                    ocr_text = extract_image_text(str(stored_path), self.settings.ocr)
+                meta = get_image_metadata(str(stored_path))
+                page_count = 1
+                if meta:
+                    dims = f"{meta.get('width', '?')}x{meta.get('height', '?')}"
+                    ocr_text = f"[Image: {dims} {meta.get('format', '')}]\n{ocr_text}"
+
+        except Exception as e:
+            logger.warning(f"Processing error for {attachment.filename} ({file_type}): {e}")
 
         # Classify document
         classification = ""
@@ -212,7 +236,7 @@ class ProcessingPipeline:
             document_id=doc_id,
             action="attachment_saved",
             status="success",
-            message=f"Saved '{attachment.filename}' ({attachment.size} bytes, hash={file_hash[:16]}...)",
+            message=f"Saved '{attachment.filename}' ({file_type}, {attachment.size} bytes, hash={file_hash[:16]}...)",
         )
 
         return doc_id
@@ -331,12 +355,8 @@ class ProcessingPipeline:
 
     def _is_processable(self, attachment: Attachment) -> bool:
         """Check if an attachment should be processed."""
-        # Currently focusing on PDFs
-        if attachment.content_type == "application/pdf":
-            return True
-        if attachment.filename.lower().endswith(".pdf"):
-            return True
-        return False
+        file_type = detect_file_type(attachment.filename, attachment.content_type)
+        return file_type is not None
 
     def _log(self, action: str, status: str, message: str,
              email_id: int = None, document_id: int = None, account_id: str = None):

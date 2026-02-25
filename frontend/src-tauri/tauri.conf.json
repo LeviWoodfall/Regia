@@ -1,6 +1,6 @@
 {
   "productName": "Regia",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "identifier": "com.regia.app",
   "build": {
     "frontendDist": "../dist",
