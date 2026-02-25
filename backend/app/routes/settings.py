@@ -72,18 +72,29 @@ async def lock():
 
 @router.get("/accounts")
 async def list_accounts(settings: AppSettings = Depends(get_settings)):
-    """List all configured email accounts."""
+    """List all configured email accounts with full poller settings."""
     accounts = []
     for acc in settings.email_accounts:
-        accounts.append(EmailAccountResponse(
-            id=acc.id,
-            name=acc.name,
-            email=acc.email,
-            provider=acc.provider,
-            enabled=acc.enabled,
-            created_at="",
-            has_credentials=credential_manager.has_credentials(acc.id) if credential_manager.is_unlocked else False,
-        ))
+        acct = {
+            "id": acc.id,
+            "name": acc.name,
+            "email": acc.email,
+            "provider": acc.provider,
+            "enabled": acc.enabled,
+            "has_credentials": credential_manager.has_credentials(acc.id) if credential_manager.is_unlocked else False,
+            # Poller settings
+            "poll_interval_minutes": acc.poll_interval_minutes,
+            "folders": acc.folders,
+            "search_criteria": acc.search_criteria,
+            "only_with_attachments": acc.only_with_attachments,
+            "max_emails_per_fetch": acc.max_emails_per_fetch,
+            "skip_older_than_days": acc.skip_older_than_days,
+            "post_action": acc.post_action,
+            "post_action_folder": acc.post_action_folder,
+            "download_invoice_links": acc.download_invoice_links,
+            "max_attachment_size_mb": acc.max_attachment_size_mb,
+        }
+        accounts.append(acct)
     return {"accounts": accounts}
 
 
@@ -129,6 +140,32 @@ async def add_account(
     )
 
     return {"status": "ok", "account_id": account.id}
+
+
+@router.put("/accounts/{account_id}")
+async def update_account(
+    account_id: str,
+    updates: Dict[str, Any],
+    settings: AppSettings = Depends(get_settings),
+):
+    """Update an existing email account's settings."""
+    for acc in settings.email_accounts:
+        if acc.id == account_id:
+            # Apply allowed updates
+            updatable = [
+                "name", "enabled", "poll_interval_minutes", "folders",
+                "search_criteria", "only_with_attachments", "max_emails_per_fetch",
+                "skip_older_than_days", "post_action", "post_action_folder",
+                "mark_as_read", "move_to_folder", "download_invoice_links",
+                "max_attachment_size_mb",
+            ]
+            for key in updatable:
+                if key in updates:
+                    setattr(acc, key, updates[key])
+            save_config(settings)
+            return {"status": "ok", "account_id": account_id}
+
+    raise HTTPException(404, "Account not found")
 
 
 @router.delete("/accounts/{account_id}")

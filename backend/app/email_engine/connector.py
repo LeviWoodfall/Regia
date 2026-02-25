@@ -89,16 +89,16 @@ class IMAPConnector:
                 pass
             self._connection = None
 
-    def select_folder(self, folder: str = "INBOX") -> int:
+    def select_folder(self, folder: str = "INBOX", readonly: bool = True) -> int:
         """
-        Select a mailbox folder (READ-ONLY).
+        Select a mailbox folder.
+        readonly=True for safe browsing, False when post-processing actions are needed.
         Returns the number of messages in the folder.
         """
         if not self._connection:
             raise RuntimeError("Not connected")
 
-        # CRITICAL: Always use readonly=True for one-way data flow
-        typ, data = self._connection.select(folder, readonly=True)
+        typ, data = self._connection.select(folder, readonly=readonly)
         if typ != "OK":
             raise imaplib.IMAP4.error(f"Failed to select folder {folder}: {data}")
         return int(data[0])
@@ -132,6 +132,58 @@ class IMAPConnector:
         if typ != "OK" or not data or not data[0]:
             return None
         return data[0][1] if isinstance(data[0], tuple) else None
+
+    def mark_as_read(self, msg_id: bytes):
+        """Mark a message as seen (read)."""
+        if not self._connection:
+            raise RuntimeError("Not connected")
+        typ, data = self._connection.store(msg_id, '+FLAGS', '\\Seen')
+        if typ != "OK":
+            raise imaplib.IMAP4.error(f"Failed to mark message {msg_id} as read: {data}")
+
+    def move_message(self, msg_id: bytes, dest_folder: str):
+        """Copy message to destination folder and mark original for deletion."""
+        if not self._connection:
+            raise RuntimeError("Not connected")
+        # IMAP doesn't have a native MOVE; copy + delete
+        typ, data = self._connection.copy(msg_id, dest_folder)
+        if typ != "OK":
+            raise imaplib.IMAP4.error(f"Failed to copy message to {dest_folder}: {data}")
+        self._connection.store(msg_id, '+FLAGS', '\\Deleted')
+        self._connection.expunge()
+
+    def delete_message(self, msg_id: bytes):
+        """Mark a message for deletion and expunge."""
+        if not self._connection:
+            raise RuntimeError("Not connected")
+        self._connection.store(msg_id, '+FLAGS', '\\Deleted')
+        self._connection.expunge()
+
+    def archive_message(self, msg_id: bytes):
+        """Archive a message (move to [Gmail]/All Mail or Archive folder)."""
+        if not self._connection:
+            raise RuntimeError("Not connected")
+        # Try common archive folder names
+        for archive_folder in ['[Gmail]/All Mail', 'Archive', 'INBOX.Archive']:
+            try:
+                typ, data = self._connection.copy(msg_id, archive_folder)
+                if typ == "OK":
+                    self._connection.store(msg_id, '+FLAGS', '\\Deleted')
+                    self._connection.expunge()
+                    return
+            except Exception:
+                continue
+        logger.warning(f"No archive folder found; message {msg_id} left in place")
+
+    def create_folder(self, folder: str) -> bool:
+        """Create a folder if it doesn't exist."""
+        if not self._connection:
+            raise RuntimeError("Not connected")
+        try:
+            typ, data = self._connection.create(folder)
+            return typ == "OK"
+        except Exception:
+            return False  # Folder likely already exists
 
     def list_folders(self) -> List[str]:
         """List available mailbox folders."""

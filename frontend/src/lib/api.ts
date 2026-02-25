@@ -70,6 +70,7 @@ export const unlock = (password: string) =>
 export const lock = () => api.post('/settings/lock');
 export const getAccounts = () => api.get('/settings/accounts');
 export const addAccount = (data: any) => api.post('/settings/accounts', data);
+export const updateAccount = (id: string, data: any) => api.put(`/settings/accounts/${id}`, data);
 export const deleteAccount = (id: string) => api.delete(`/settings/accounts/${id}`);
 export const storeCredentials = (accountId: string, data: any) =>
   api.post(`/settings/accounts/${accountId}/credentials`, data);

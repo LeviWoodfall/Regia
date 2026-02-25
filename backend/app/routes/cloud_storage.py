@@ -95,15 +95,36 @@ async def delete_connection(connection_id: str, request: Request):
 
 
 @router.post("/oauth2/start", response_model=OAuth2StartResponse)
-async def start_oauth2(data: OAuth2StartRequest):
+async def start_oauth2(data: OAuth2StartRequest, request: Request):
     """Start an OAuth2 authorization flow for cloud storage or email."""
     try:
+        state = _get_state(request)
+        settings = state["settings"]
+        oauth_cfg = settings.oauth_providers
+
+        # Use provided client_id or fall back to config
+        client_id = data.client_id
+        client_secret = data.client_secret
+        if not client_id:
+            if data.provider in ("gmail", "google_drive"):
+                client_id = oauth_cfg.google_client_id
+                client_secret = client_secret or oauth_cfg.google_client_secret
+            elif data.provider in ("outlook", "onedrive"):
+                client_id = oauth_cfg.microsoft_client_id
+                client_secret = client_secret or oauth_cfg.microsoft_client_secret
+
+        if not client_id:
+            raise ValueError(
+                f"No OAuth client ID configured for {data.provider}. "
+                "Go to Settings → OAuth Providers to add your Google/Microsoft credentials."
+            )
+
         redirect_uri = "http://localhost:8420/api/oauth2/callback"
         result = start_oauth2_flow(
             flow_type=data.flow_type,
             provider=data.provider,
-            client_id=data.client_id,
-            client_secret=data.client_secret,
+            client_id=client_id,
+            client_secret=client_secret,
             redirect_uri=redirect_uri,
         )
         return result

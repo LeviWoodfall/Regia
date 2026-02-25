@@ -1,12 +1,12 @@
 import { useEffect, useState } from 'react';
 import {
   Shield, Lock, Unlock, Mail, Plus, Trash2, Save, Eye, EyeOff,
-  Brain, Clock, FolderOpen, Cloud, ExternalLink, Link2,
+  Brain, Clock, FolderOpen, Cloud, ExternalLink, Link2, KeyRound,
   ListFilter, Globe, Wifi, ChevronDown, ChevronUp, ToggleLeft, ToggleRight,
 } from 'lucide-react';
 import {
   getStatus, setupMasterPassword, unlock as apiUnlock, lock as apiLock,
-  getAccounts, addAccount, deleteAccount, storeCredentials, getConfig, updateConfig,
+  getAccounts, addAccount, updateAccount, deleteAccount, storeCredentials, getConfig, updateConfig,
   getCloudProviders, getCloudConnections, createCloudConnection, deleteCloudConnection,
   startOAuth2Flow, getEmailProviders,
   getRules, createRule, updateRule, deleteRule, getRuleFields,
@@ -29,9 +29,14 @@ export default function SettingsPage() {
     name: '', email: '', provider: 'gmail', auth_method: 'app_password',
     imap_server: '', imap_port: 993, poll_interval_minutes: 15,
     folders: ['INBOX'], download_invoice_links: true,
+    search_criteria: 'UNSEEN', only_with_attachments: false,
+    max_emails_per_fetch: 50, skip_older_than_days: 0,
+    post_action: 'none', post_action_folder: '',
   });
   const [appPassword, setAppPassword] = useState('');
   const [showAddAccount, setShowAddAccount] = useState(false);
+  const [editingAccount, setEditingAccount] = useState<string | null>(null);
+  const [editAccount, setEditAccount] = useState<any>(null);
 
   // Cloud storage
   const [cloudProviders, setCloudProviders] = useState<any[]>([]);
@@ -126,8 +131,9 @@ export default function SettingsPage() {
       setMessage('Complete authorization in the popup window, then refresh.');
       // Reload connections after a delay
       setTimeout(() => loadCloudData(), 5000);
-    } catch {
-      setMessage('Failed to start cloud connection');
+    } catch (err: any) {
+      const detail = err?.response?.data?.detail || 'Failed to start cloud connection';
+      setMessage(detail);
     }
   };
 
@@ -139,8 +145,9 @@ export default function SettingsPage() {
       });
       window.open(resp.data.url, '_blank', 'width=600,height=700');
       setMessage('Complete authorization in the popup window.');
-    } catch {
-      setMessage('Failed to start email connection');
+    } catch (err: any) {
+      const detail = err?.response?.data?.detail || 'Failed to start email connection';
+      setMessage(detail);
     }
   };
 
@@ -179,15 +186,30 @@ export default function SettingsPage() {
   };
 
   const handleAddAccount = async () => {
+    // If user provided a password, credential store must be unlocked first
+    if (appPassword && !unlocked) {
+      setMessage(initialized
+        ? 'Please unlock the credential store first (Security tab) before adding credentials.'
+        : 'Please set up a master password first (Security tab) before adding credentials.'
+      );
+      return;
+    }
+
     try {
       const resp = await addAccount(newAccount);
       const accountId = resp.data.account_id;
 
-      if (appPassword) {
-        await storeCredentials(accountId, {
-          account_id: accountId,
-          app_password: appPassword,
-        });
+      if (appPassword && unlocked) {
+        try {
+          await storeCredentials(accountId, {
+            account_id: accountId,
+            app_password: appPassword,
+          });
+        } catch {
+          setMessage('Account added but failed to store credentials — is the credential store unlocked?');
+          loadAccounts();
+          return;
+        }
       }
 
       setShowAddAccount(false);
@@ -195,6 +217,9 @@ export default function SettingsPage() {
         name: '', email: '', provider: 'gmail', auth_method: 'app_password',
         imap_server: '', imap_port: 993, poll_interval_minutes: 15,
         folders: ['INBOX'], download_invoice_links: true,
+        search_criteria: 'UNSEEN', only_with_attachments: false,
+        max_emails_per_fetch: 50, skip_older_than_days: 0,
+        post_action: 'none', post_action_folder: '',
       });
       setAppPassword('');
       setMessage('Account added successfully');
@@ -255,6 +280,7 @@ export default function SettingsPage() {
     { id: 'security', label: 'Security', icon: Shield },
     { id: 'accounts', label: 'Email Accounts', icon: Mail },
     { id: 'rules', label: 'Email Rules', icon: ListFilter },
+    { id: 'oauth', label: 'OAuth Providers', icon: KeyRound },
     { id: 'cloud', label: 'Cloud Storage', icon: Cloud },
     { id: 'cloudmode', label: 'Cloud Mode', icon: Globe },
     { id: 'llm', label: 'LLM / AI', icon: Brain },
@@ -379,57 +405,140 @@ export default function SettingsPage() {
 
             {/* Add Account Form */}
             {showAddAccount && (
-              <div className="bg-sand-50 rounded-xl p-4 border border-sand-200 space-y-3">
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="text-xs font-medium text-sand-600 mb-1 block">Name</label>
-                    <input
-                      type="text" placeholder="My Gmail"
-                      value={newAccount.name} onChange={e => setNewAccount({...newAccount, name: e.target.value})}
-                      className="w-full px-3 py-2 bg-white border border-sand-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-sunset-400/40"
-                    />
+              <div className="bg-sand-50 rounded-xl p-4 border border-sand-200 space-y-4">
+                {!unlocked && (
+                  <div className="flex items-center gap-2 px-3 py-2 bg-yellow-50 border border-yellow-200 rounded-lg text-xs text-yellow-700">
+                    <Shield className="w-4 h-4 shrink-0" />
+                    {initialized
+                      ? 'Credential store is locked. Unlock it in the Security tab to save passwords.'
+                      : 'Set up a master password in the Security tab first to save credentials securely.'}
                   </div>
-                  <div>
-                    <label className="text-xs font-medium text-sand-600 mb-1 block">Email</label>
-                    <input
-                      type="email" placeholder="user@gmail.com"
-                      value={newAccount.email} onChange={e => setNewAccount({...newAccount, email: e.target.value})}
-                      className="w-full px-3 py-2 bg-white border border-sand-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-sunset-400/40"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-xs font-medium text-sand-600 mb-1 block">Provider</label>
-                    <select
-                      value={newAccount.provider} onChange={e => setNewAccount({...newAccount, provider: e.target.value})}
-                      className="w-full px-3 py-2 bg-white border border-sand-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-sunset-400/40"
-                    >
-                      <option value="gmail">Gmail</option>
-                      <option value="outlook">Outlook</option>
-                      <option value="imap">Custom IMAP</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="text-xs font-medium text-sand-600 mb-1 block">Poll Interval (min)</label>
-                    <input
-                      type="number" min={1} max={1440}
-                      value={newAccount.poll_interval_minutes}
-                      onChange={e => setNewAccount({...newAccount, poll_interval_minutes: parseInt(e.target.value) || 15})}
-                      className="w-full px-3 py-2 bg-white border border-sand-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-sunset-400/40"
-                    />
-                  </div>
-                </div>
+                )}
+
+                {/* Connection */}
                 <div>
-                  <label className="text-xs font-medium text-sand-600 mb-1 block">App Password</label>
-                  <input
-                    type="password" placeholder="App-specific password"
-                    value={appPassword} onChange={e => setAppPassword(e.target.value)}
-                    className="w-full px-3 py-2 bg-white border border-sand-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-sunset-400/40"
-                  />
-                  <p className="text-[11px] text-sand-400 mt-1">
-                    For Gmail: enable 2FA then create an app password at myaccount.google.com
-                  </p>
+                  <h4 className="text-xs font-semibold text-warm-800 mb-2">Connection</h4>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-xs font-medium text-sand-600 mb-1 block">Name</label>
+                      <input type="text" placeholder="My Gmail" value={newAccount.name}
+                        onChange={e => setNewAccount({...newAccount, name: e.target.value})}
+                        className="w-full px-3 py-2 bg-white border border-sand-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-sunset-400/40" />
+                    </div>
+                    <div>
+                      <label className="text-xs font-medium text-sand-600 mb-1 block">Email</label>
+                      <input type="email" placeholder="user@gmail.com" value={newAccount.email}
+                        onChange={e => setNewAccount({...newAccount, email: e.target.value})}
+                        className="w-full px-3 py-2 bg-white border border-sand-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-sunset-400/40" />
+                    </div>
+                    <div>
+                      <label className="text-xs font-medium text-sand-600 mb-1 block">Provider</label>
+                      <select value={newAccount.provider} onChange={e => setNewAccount({...newAccount, provider: e.target.value})}
+                        className="w-full px-3 py-2 bg-white border border-sand-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-sunset-400/40">
+                        <option value="gmail">Gmail</option>
+                        <option value="outlook">Outlook</option>
+                        <option value="imap">Custom IMAP</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="text-xs font-medium text-sand-600 mb-1 block">App Password</label>
+                      <input type="password" placeholder="App-specific password" value={appPassword}
+                        onChange={e => setAppPassword(e.target.value)}
+                        className="w-full px-3 py-2 bg-white border border-sand-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-sunset-400/40" />
+                    </div>
+                  </div>
                 </div>
-                <div className="flex gap-2">
+
+                {/* Polling */}
+                <div>
+                  <h4 className="text-xs font-semibold text-warm-800 mb-2">Polling & Filtering</h4>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-xs font-medium text-sand-600 mb-1 block">Folders</label>
+                      <input type="text" placeholder="INBOX" value={newAccount.folders.join(', ')}
+                        onChange={e => setNewAccount({...newAccount, folders: e.target.value.split(',').map(s => s.trim()).filter(Boolean)})}
+                        className="w-full px-3 py-2 bg-white border border-sand-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-sunset-400/40" />
+                      <p className="text-[10px] text-sand-400 mt-0.5">Comma-separated folder names</p>
+                    </div>
+                    <div>
+                      <label className="text-xs font-medium text-sand-600 mb-1 block">Poll Interval (min)</label>
+                      <input type="number" min={1} max={1440} value={newAccount.poll_interval_minutes}
+                        onChange={e => setNewAccount({...newAccount, poll_interval_minutes: parseInt(e.target.value) || 15})}
+                        className="w-full px-3 py-2 bg-white border border-sand-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-sunset-400/40" />
+                    </div>
+                    <div>
+                      <label className="text-xs font-medium text-sand-600 mb-1 block">Search Criteria</label>
+                      <select value={newAccount.search_criteria}
+                        onChange={e => setNewAccount({...newAccount, search_criteria: e.target.value})}
+                        className="w-full px-3 py-2 bg-white border border-sand-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-sunset-400/40">
+                        <option value="UNSEEN">Unread only</option>
+                        <option value="ALL">All emails</option>
+                        <option value="SEEN">Read only</option>
+                        <option value="FLAGGED">Starred / flagged</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="text-xs font-medium text-sand-600 mb-1 block">Max Emails per Fetch</label>
+                      <input type="number" min={0} max={500} value={newAccount.max_emails_per_fetch}
+                        onChange={e => setNewAccount({...newAccount, max_emails_per_fetch: parseInt(e.target.value) || 0})}
+                        className="w-full px-3 py-2 bg-white border border-sand-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-sunset-400/40" />
+                      <p className="text-[10px] text-sand-400 mt-0.5">0 = unlimited</p>
+                    </div>
+                    <div>
+                      <label className="text-xs font-medium text-sand-600 mb-1 block">Skip Older Than (days)</label>
+                      <input type="number" min={0} value={newAccount.skip_older_than_days}
+                        onChange={e => setNewAccount({...newAccount, skip_older_than_days: parseInt(e.target.value) || 0})}
+                        className="w-full px-3 py-2 bg-white border border-sand-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-sunset-400/40" />
+                      <p className="text-[10px] text-sand-400 mt-0.5">0 = no age limit</p>
+                    </div>
+                    <div className="flex items-center gap-2 pt-5">
+                      <input type="checkbox" id="only_attachments" checked={newAccount.only_with_attachments}
+                        onChange={e => setNewAccount({...newAccount, only_with_attachments: e.target.checked})}
+                        className="rounded border-sand-300" />
+                      <label htmlFor="only_attachments" className="text-xs text-sand-600">Only emails with attachments</label>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Post-Processing */}
+                <div>
+                  <h4 className="text-xs font-semibold text-warm-800 mb-2">After Ingestion</h4>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-xs font-medium text-sand-600 mb-1 block">Post-Processing Action</label>
+                      <select value={newAccount.post_action}
+                        onChange={e => setNewAccount({...newAccount, post_action: e.target.value})}
+                        className="w-full px-3 py-2 bg-white border border-sand-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-sunset-400/40">
+                        <option value="none">Leave as-is (read-only)</option>
+                        <option value="mark_read">Mark as read</option>
+                        <option value="move">Move to folder</option>
+                        <option value="archive">Archive</option>
+                        <option value="delete">Delete from server</option>
+                      </select>
+                    </div>
+                    {newAccount.post_action === 'move' && (
+                      <div>
+                        <label className="text-xs font-medium text-sand-600 mb-1 block">Move To Folder</label>
+                        <input type="text" placeholder="Processed" value={newAccount.post_action_folder}
+                          onChange={e => setNewAccount({...newAccount, post_action_folder: e.target.value})}
+                          className="w-full px-3 py-2 bg-white border border-sand-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-sunset-400/40" />
+                      </div>
+                    )}
+                    <div className="flex items-center gap-2 pt-5">
+                      <input type="checkbox" id="dl_invoices" checked={newAccount.download_invoice_links}
+                        onChange={e => setNewAccount({...newAccount, download_invoice_links: e.target.checked})}
+                        className="rounded border-sand-300" />
+                      <label htmlFor="dl_invoices" className="text-xs text-sand-600">Download invoice links from emails</label>
+                    </div>
+                  </div>
+                  {newAccount.post_action === 'delete' && (
+                    <div className="flex items-center gap-2 mt-2 px-3 py-2 bg-red-50 border border-red-200 rounded-lg text-xs text-red-600">
+                      <Trash2 className="w-3.5 h-3.5 shrink-0" /> Emails will be permanently deleted from the server after ingestion.
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex gap-2 pt-1">
                   <button onClick={handleAddAccount}
                     className="px-4 py-2 bg-sunset-500 text-white rounded-lg text-xs font-medium hover:bg-sunset-600 transition-colors">
                     Save Account
@@ -451,33 +560,217 @@ export default function SettingsPage() {
             ) : (
               <div className="space-y-2">
                 {accounts.map((acc: any) => (
-                  <div key={acc.id} className="flex items-center justify-between px-4 py-3 bg-sand-50 rounded-xl border border-sand-200">
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-lg bg-sunset-100 flex items-center justify-center">
-                        <Mail className="w-4 h-4 text-sunset-500" />
+                  <div key={acc.id} className="bg-sand-50 rounded-xl border border-sand-200 overflow-hidden">
+                    <div className="flex items-center justify-between px-4 py-3">
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-lg bg-sunset-100 flex items-center justify-center">
+                          <Mail className="w-4 h-4 text-sunset-500" />
+                        </div>
+                        <div>
+                          <p className="text-sm font-medium text-warm-900">{acc.name || acc.email}</p>
+                          <p className="text-[11px] text-sand-500">
+                            {acc.email} · {acc.provider} · {acc.search_criteria || 'UNSEEN'} · every {acc.poll_interval_minutes}m
+                            {acc.post_action && acc.post_action !== 'none' && ` · ${acc.post_action}`}
+                          </p>
+                        </div>
                       </div>
-                      <div>
-                        <p className="text-sm font-medium text-warm-900">{acc.name || acc.email}</p>
-                        <p className="text-[11px] text-sand-500">{acc.email} · {acc.provider}</p>
+                      <div className="flex items-center gap-1.5">
+                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${
+                          acc.enabled ? 'bg-green-100 text-green-700' : 'bg-sand-200 text-sand-500'
+                        }`}>
+                          {acc.enabled ? 'Active' : 'Disabled'}
+                        </span>
+                        <button onClick={() => { setEditingAccount(editingAccount === acc.id ? null : acc.id); setEditAccount({...acc}); }}
+                          className="p-1.5 rounded-lg hover:bg-sand-200 text-sand-400 hover:text-warm-600 transition-colors" title="Edit">
+                          <ChevronDown className={`w-4 h-4 transition-transform ${editingAccount === acc.id ? 'rotate-180' : ''}`} />
+                        </button>
+                        <button onClick={() => handleDeleteAccount(acc.id)}
+                          className="p-1.5 rounded-lg hover:bg-red-100 text-sand-400 hover:text-red-500 transition-colors" title="Delete">
+                          <Trash2 className="w-4 h-4" />
+                        </button>
                       </div>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${
-                        acc.enabled ? 'bg-green-100 text-green-700' : 'bg-sand-200 text-sand-500'
-                      }`}>
-                        {acc.enabled ? 'Active' : 'Disabled'}
-                      </span>
-                      <button
-                        onClick={() => handleDeleteAccount(acc.id)}
-                        className="p-1.5 rounded-lg hover:bg-red-100 text-sand-400 hover:text-red-500 transition-colors"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
+
+                    {/* Inline Edit Panel */}
+                    {editingAccount === acc.id && editAccount && (
+                      <div className="px-4 pb-4 pt-1 border-t border-sand-200 space-y-3">
+                        <div className="grid grid-cols-3 gap-3">
+                          <div>
+                            <label className="text-[10px] font-medium text-sand-500 mb-0.5 block">Folders</label>
+                            <input type="text" value={(editAccount.folders || []).join(', ')}
+                              onChange={e => setEditAccount({...editAccount, folders: e.target.value.split(',').map((s: string) => s.trim()).filter(Boolean)})}
+                              className="w-full px-2 py-1.5 bg-white border border-sand-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-sunset-400/40" />
+                          </div>
+                          <div>
+                            <label className="text-[10px] font-medium text-sand-500 mb-0.5 block">Poll (min)</label>
+                            <input type="number" min={1} max={1440} value={editAccount.poll_interval_minutes || 15}
+                              onChange={e => setEditAccount({...editAccount, poll_interval_minutes: parseInt(e.target.value) || 15})}
+                              className="w-full px-2 py-1.5 bg-white border border-sand-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-sunset-400/40" />
+                          </div>
+                          <div>
+                            <label className="text-[10px] font-medium text-sand-500 mb-0.5 block">Search</label>
+                            <select value={editAccount.search_criteria || 'UNSEEN'}
+                              onChange={e => setEditAccount({...editAccount, search_criteria: e.target.value})}
+                              className="w-full px-2 py-1.5 bg-white border border-sand-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-sunset-400/40">
+                              <option value="UNSEEN">Unread only</option>
+                              <option value="ALL">All emails</option>
+                              <option value="SEEN">Read only</option>
+                              <option value="FLAGGED">Starred / flagged</option>
+                            </select>
+                          </div>
+                          <div>
+                            <label className="text-[10px] font-medium text-sand-500 mb-0.5 block">Max per Fetch</label>
+                            <input type="number" min={0} max={500} value={editAccount.max_emails_per_fetch || 0}
+                              onChange={e => setEditAccount({...editAccount, max_emails_per_fetch: parseInt(e.target.value) || 0})}
+                              className="w-full px-2 py-1.5 bg-white border border-sand-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-sunset-400/40" />
+                          </div>
+                          <div>
+                            <label className="text-[10px] font-medium text-sand-500 mb-0.5 block">Skip Older (days)</label>
+                            <input type="number" min={0} value={editAccount.skip_older_than_days || 0}
+                              onChange={e => setEditAccount({...editAccount, skip_older_than_days: parseInt(e.target.value) || 0})}
+                              className="w-full px-2 py-1.5 bg-white border border-sand-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-sunset-400/40" />
+                          </div>
+                          <div>
+                            <label className="text-[10px] font-medium text-sand-500 mb-0.5 block">Post Action</label>
+                            <select value={editAccount.post_action || 'none'}
+                              onChange={e => setEditAccount({...editAccount, post_action: e.target.value})}
+                              className="w-full px-2 py-1.5 bg-white border border-sand-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-sunset-400/40">
+                              <option value="none">Leave as-is</option>
+                              <option value="mark_read">Mark read</option>
+                              <option value="move">Move to folder</option>
+                              <option value="archive">Archive</option>
+                              <option value="delete">Delete</option>
+                            </select>
+                          </div>
+                        </div>
+                        {editAccount.post_action === 'move' && (
+                          <div className="max-w-xs">
+                            <label className="text-[10px] font-medium text-sand-500 mb-0.5 block">Move To Folder</label>
+                            <input type="text" placeholder="Processed" value={editAccount.post_action_folder || ''}
+                              onChange={e => setEditAccount({...editAccount, post_action_folder: e.target.value})}
+                              className="w-full px-2 py-1.5 bg-white border border-sand-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-sunset-400/40" />
+                          </div>
+                        )}
+                        <div className="flex items-center gap-4">
+                          <label className="flex items-center gap-1.5 text-xs text-sand-600">
+                            <input type="checkbox" checked={editAccount.only_with_attachments || false}
+                              onChange={e => setEditAccount({...editAccount, only_with_attachments: e.target.checked})}
+                              className="rounded border-sand-300" /> Attachments only
+                          </label>
+                          <label className="flex items-center gap-1.5 text-xs text-sand-600">
+                            <input type="checkbox" checked={editAccount.download_invoice_links !== false}
+                              onChange={e => setEditAccount({...editAccount, download_invoice_links: e.target.checked})}
+                              className="rounded border-sand-300" /> Download invoice links
+                          </label>
+                          <label className="flex items-center gap-1.5 text-xs text-sand-600">
+                            <input type="checkbox" checked={editAccount.enabled !== false}
+                              onChange={e => setEditAccount({...editAccount, enabled: e.target.checked})}
+                              className="rounded border-sand-300" /> Enabled
+                          </label>
+                        </div>
+                        <div className="flex gap-2">
+                          <button onClick={async () => {
+                            try {
+                              await updateAccount(acc.id, editAccount);
+                              setMessage('Account updated'); setEditingAccount(null); loadAccounts();
+                            } catch { setMessage('Failed to update account'); }
+                          }}
+                            className="px-3 py-1.5 bg-sunset-500 text-white rounded-lg text-xs font-medium hover:bg-sunset-600 transition-colors">
+                            <Save className="w-3.5 h-3.5 inline mr-1" />Save Changes
+                          </button>
+                          <button onClick={() => setEditingAccount(null)}
+                            className="px-3 py-1.5 bg-sand-100 text-sand-600 rounded-lg text-xs font-medium hover:bg-sand-200 transition-colors">
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
             )}
+          </div>
+        )}
+
+        {/* === OAuth Providers Tab === */}
+        {tab === 'oauth' && config && (
+          <div className="space-y-6 max-w-lg">
+            <div>
+              <h3 className="text-lg font-semibold text-warm-900 flex items-center gap-2">
+                <KeyRound className="w-5 h-5 text-sunset-500" /> OAuth Provider Credentials
+              </h3>
+              <p className="text-xs text-sand-500 mt-1">
+                Required for "Connect with Google/Microsoft" buttons. Create OAuth credentials in
+                your provider's developer console and enter them here.
+              </p>
+            </div>
+
+            {/* Google */}
+            <div className="space-y-3 p-4 bg-sand-50 rounded-xl border border-sand-200">
+              <h4 className="text-sm font-semibold text-warm-900 flex items-center gap-2">
+                <ExternalLink className="w-4 h-4" /> Google (Gmail & Drive)
+              </h4>
+              <p className="text-[11px] text-sand-400">
+                Create credentials at{' '}
+                <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noreferrer"
+                  className="text-sunset-500 underline">console.cloud.google.com</a>.
+                Set redirect URI to: <code className="bg-sand-200 px-1 rounded text-[10px]">http://localhost:8420/api/oauth2/callback</code>
+              </p>
+              <div>
+                <label className="text-xs font-medium text-sand-600 mb-1 block">Client ID</label>
+                <input
+                  type="text" placeholder="xxxx.apps.googleusercontent.com"
+                  value={config.oauth_providers?.google_client_id || ''}
+                  onChange={e => setConfig({...config, oauth_providers: {...(config.oauth_providers || {}), google_client_id: e.target.value}})}
+                  className="w-full px-3 py-2 bg-white border border-sand-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-sunset-400/40"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-sand-600 mb-1 block">Client Secret</label>
+                <input
+                  type="password" placeholder="GOCSPX-..."
+                  value={config.oauth_providers?.google_client_secret || ''}
+                  onChange={e => setConfig({...config, oauth_providers: {...(config.oauth_providers || {}), google_client_secret: e.target.value}})}
+                  className="w-full px-3 py-2 bg-white border border-sand-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-sunset-400/40"
+                />
+              </div>
+            </div>
+
+            {/* Microsoft */}
+            <div className="space-y-3 p-4 bg-sand-50 rounded-xl border border-sand-200">
+              <h4 className="text-sm font-semibold text-warm-900 flex items-center gap-2">
+                <ExternalLink className="w-4 h-4" /> Microsoft (Outlook & OneDrive)
+              </h4>
+              <p className="text-[11px] text-sand-400">
+                Create credentials at{' '}
+                <a href="https://portal.azure.com/#view/Microsoft_AAD_RegisteredApps" target="_blank" rel="noreferrer"
+                  className="text-sunset-500 underline">Azure Portal</a>.
+                Set redirect URI to: <code className="bg-sand-200 px-1 rounded text-[10px]">http://localhost:8420/api/oauth2/callback</code>
+              </p>
+              <div>
+                <label className="text-xs font-medium text-sand-600 mb-1 block">Client ID (Application ID)</label>
+                <input
+                  type="text" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+                  value={config.oauth_providers?.microsoft_client_id || ''}
+                  onChange={e => setConfig({...config, oauth_providers: {...(config.oauth_providers || {}), microsoft_client_id: e.target.value}})}
+                  className="w-full px-3 py-2 bg-white border border-sand-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-sunset-400/40"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-sand-600 mb-1 block">Client Secret</label>
+                <input
+                  type="password" placeholder="Client secret value"
+                  value={config.oauth_providers?.microsoft_client_secret || ''}
+                  onChange={e => setConfig({...config, oauth_providers: {...(config.oauth_providers || {}), microsoft_client_secret: e.target.value}})}
+                  className="w-full px-3 py-2 bg-white border border-sand-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-sunset-400/40"
+                />
+              </div>
+            </div>
+
+            <button onClick={handleSaveConfig}
+              className="flex items-center gap-2 px-4 py-2 bg-sunset-500 text-white rounded-lg text-xs font-medium hover:bg-sunset-600 transition-colors">
+              <Save className="w-4 h-4" /> Save OAuth Credentials
+            </button>
           </div>
         )}
 

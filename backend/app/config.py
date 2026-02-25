@@ -56,9 +56,17 @@ class EmailAccountConfig(BaseModel):
     enabled: bool = True
     poll_interval_minutes: int = 15
     folders: List[str] = Field(default_factory=lambda: ["INBOX"])
-    # Post-processing
-    mark_as_read: bool = True
-    move_to_folder: str = ""  # e.g., "Processed" - empty = leave in place
+    # Search / filter
+    search_criteria: str = "UNSEEN"  # IMAP search: UNSEEN, ALL, SEEN, FLAGGED, etc.
+    only_with_attachments: bool = False  # Only ingest emails that have attachments
+    max_emails_per_fetch: int = 50  # Limit per fetch cycle (0 = unlimited)
+    skip_older_than_days: int = 0  # Skip emails older than N days (0 = no limit)
+    # Post-processing actions (applied on the mail server after ingestion)
+    post_action: str = "none"  # none, mark_read, move, delete, archive
+    post_action_folder: str = ""  # Folder to move to (for post_action=move)
+    mark_as_read: bool = False  # Legacy compat; prefer post_action=mark_read
+    move_to_folder: str = ""  # Legacy compat; prefer post_action=move + post_action_folder
+    # Attachment handling
     max_attachment_size_mb: int = 50
     download_invoice_links: bool = True
 
@@ -127,6 +135,14 @@ class CloudStorageProviderConfig(BaseModel):
     last_sync_at: Optional[str] = None
 
 
+class OAuthProvidersConfig(BaseModel):
+    """OAuth2 client credentials for Google and Microsoft."""
+    google_client_id: str = ""
+    google_client_secret: str = ""
+    microsoft_client_id: str = ""
+    microsoft_client_secret: str = ""
+
+
 class CloudStorageConfig(BaseModel):
     """Configuration for cloud storage integrations."""
     providers: List[CloudStorageProviderConfig] = Field(default_factory=list)
@@ -186,6 +202,7 @@ class AppSettings(BaseSettings):
     scheduler: SchedulerConfig = Field(default_factory=SchedulerConfig)
     security: SecurityConfig = Field(default_factory=SecurityConfig)
     cloud_storage: CloudStorageConfig = Field(default_factory=CloudStorageConfig)
+    oauth_providers: OAuthProvidersConfig = Field(default_factory=OAuthProvidersConfig)
     auth: AuthConfig = Field(default_factory=AuthConfig)
     ui: UIConfig = Field(default_factory=UIConfig)
 
