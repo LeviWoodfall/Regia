@@ -1,18 +1,21 @@
 import axios from 'axios';
 
 // Resolve API base URL:
-// 1. If VITE_API_URL env var is set (for mobile/LAN), use it
-// 2. If running inside Tauri or on a non-localhost domain, use current origin
-// 3. Otherwise use relative /api (dev proxy or same-origin production)
+// 1. Explicit env var or localStorage override (for mobile/LAN)
+// 2. Tauri desktop app → connect to localhost backend
+// 3. Otherwise use relative /api (same-origin production or dev proxy)
 function resolveBaseUrl(): string {
-  // Explicit override via env var or localStorage (mobile private cloud)
   const envUrl = import.meta.env.VITE_API_URL;
   if (envUrl) return envUrl.replace(/\/$/, '') + '/api';
 
   const savedServer = localStorage.getItem('regia_server_url');
   if (savedServer) return savedServer.replace(/\/$/, '') + '/api';
 
-  // If served from the backend (same origin), use relative path
+  // Detect Tauri: window.__TAURI__ exists in Tauri v2 apps
+  if (typeof window !== 'undefined' && (window as any).__TAURI__) {
+    return 'http://localhost:8420/api';
+  }
+
   return '/api';
 }
 
@@ -37,6 +40,9 @@ export const setupUser = (data: any) => api.post('/auth/setup', data);
 export const login = (data: any) => api.post('/auth/login', data);
 export const logout = () => api.post('/auth/logout');
 export const changePassword = (data: any) => api.post('/auth/change-password', data);
+export const forgotPassword = (email: string) => api.post('/auth/forgot-password', { email });
+export const resetPassword = (token: string, new_password: string) =>
+  api.post('/auth/reset-password', { token, new_password });
 
 // === UI Preferences ===
 export const getUIPreferences = () => api.get('/ui/preferences');

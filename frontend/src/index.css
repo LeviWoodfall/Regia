@@ -51,38 +51,71 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* === Dark Mode Override === */
+/* === Dark Mode — Softer darker version of the warm theme === */
 
 .dark {
-  --color-warm-50: #1a1410;
-  --color-warm-100: #231c15;
-  --color-warm-200: #2e241b;
-  --color-warm-300: #3d3026;
-  --color-warm-400: #5c4a3a;
-  --color-warm-500: #7a6350;
-  --color-warm-600: #9a8068;
-  --color-warm-700: #b9a08a;
-  --color-warm-800: #d4c0ad;
-  --color-warm-900: #ebe0d4;
-  --color-warm-950: #f8f3ee;
+  /* Backgrounds: dark charcoal with warm brown undertone */
+  --color-warm-50: #151210;
+  --color-warm-100: #1c1814;
+  --color-warm-200: #28221c;
+  /* Mid-tones */
+  --color-warm-300: #3b3229;
+  --color-warm-400: #56493c;
+  --color-warm-500: #736452;
+  /* Text tones: readable warm grays */
+  --color-warm-600: #97876f;
+  --color-warm-700: #b5a590;
+  --color-warm-800: #d1c3b2;
+  --color-warm-900: #e8ddd0;
+  --color-warm-950: #f3ede5;
 
-  --color-sand-50: #1e1915;
-  --color-sand-100: #27211b;
-  --color-sand-200: #342c23;
-  --color-sand-300: #4a3f33;
-  --color-sand-400: #6b5d4d;
-  --color-sand-500: #8d7c68;
-  --color-sand-600: #a99582;
-  --color-sand-700: #c4b19e;
-  --color-sand-800: #ddd0c2;
-  --color-sand-900: #f0e9e0;
-  --color-sand-950: #faf7f3;
+  /* Sand palette: same approach */
+  --color-sand-50: #171412;
+  --color-sand-100: #1e1b17;
+  --color-sand-200: #2b2620;
+  --color-sand-300: #40382e;
+  --color-sand-400: #5d5244;
+  --color-sand-500: #7c6f5e;
+  --color-sand-600: #9c8d7a;
+  --color-sand-700: #baa993;
+  --color-sand-800: #d6c9b9;
+  --color-sand-900: #ede5db;
+  --color-sand-950: #f7f2ec;
+
+  /* Sunset accents: slightly brighter for dark bg contrast */
+  --color-sunset-50: #2a1a10;
+  --color-sunset-100: #3a2214;
+  --color-sunset-200: #5a3418;
+  --color-sunset-300: #864a1a;
+  --color-sunset-400: #c06820;
+  --color-sunset-500: #ec7520;
+  --color-sunset-600: #f09040;
+  --color-sunset-700: #f6b676;
+  --color-sunset-800: #fad4ab;
+  --color-sunset-900: #fdebd6;
+  --color-sunset-950: #fef7f0;
 }
 
 .dark body,
 body.dark {
   background-color: var(--color-warm-50);
   color: var(--color-warm-950);
+}
+
+/* Dark mode: sidebar stays dark with warm tones */
+.dark aside {
+  background-color: #110f0d !important;
+  border-color: #1e1a16 !important;
+}
+
+/* Dark mode: cards and panels get dark bg instead of white */
+.dark .bg-white {
+  background-color: var(--color-warm-100) !important;
+}
+
+/* Dark mode: ensure inputs look correct */
+.dark input, .dark textarea, .dark select {
+  color-scheme: dark;
 }
 
 /* Scrollbar styling for warm theme */

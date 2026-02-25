@@ -214,6 +214,7 @@ class LogListResponse(BaseModel):
 class UserSetup(BaseModel):
     username: str
     password: str
+    email: str = ""
     display_name: str = ""
 
 
@@ -231,6 +232,15 @@ class LoginResponse(BaseModel):
 
 class ChangePasswordRequest(BaseModel):
     old_password: str
+    new_password: str
+
+
+class ForgotPasswordRequest(BaseModel):
+    email: str
+
+
+class ResetPasswordRequest(BaseModel):
+    token: str
     new_password: str
 
 

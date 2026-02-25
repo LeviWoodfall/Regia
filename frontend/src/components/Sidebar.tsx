@@ -90,7 +90,7 @@ export default function Sidebar() {
           </div>
         )}
 
-        <div className="text-[10px] text-warm-600 px-3">Regia v0.1.0</div>
+        <div className="text-[10px] text-warm-600 px-3">Regia v0.2.1</div>
       </div>
     </aside>
   );

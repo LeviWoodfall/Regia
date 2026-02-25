@@ -14,7 +14,7 @@ import LogsPage from './pages/LogsPage';
 import SettingsPage from './pages/SettingsPage';
 
 function AuthGuard({ children }: { children: React.ReactNode }) {
-  const { authenticated, setupCompleted, loading } = useAuth();
+  const { authenticated, loading } = useAuth();
 
   if (loading) {
     return (
@@ -24,7 +24,10 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
     );
   }
 
-  if (!authenticated) {
+  // Check if URL has a reset token — always show login page for that
+  const hasResetToken = window.location.search.includes('token=');
+
+  if (!authenticated || hasResetToken) {
     return <LoginPage />;
   }
 

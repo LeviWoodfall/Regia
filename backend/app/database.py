@@ -171,6 +171,7 @@ CREATE TABLE IF NOT EXISTS scheduler_jobs (
 CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     username TEXT NOT NULL UNIQUE,
+    email TEXT DEFAULT '',
     password_hash TEXT NOT NULL,
     display_name TEXT DEFAULT '',
     is_admin INTEGER NOT NULL DEFAULT 1,
@@ -184,6 +185,15 @@ CREATE TABLE IF NOT EXISTS sessions (
     user_id INTEGER NOT NULL REFERENCES users(id),
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     expires_at TEXT NOT NULL
+);
+
+-- Password reset tokens
+CREATE TABLE IF NOT EXISTS password_reset_tokens (
+    token TEXT PRIMARY KEY,
+    user_id INTEGER NOT NULL REFERENCES users(id),
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    expires_at TEXT NOT NULL,
+    used INTEGER NOT NULL DEFAULT 0
 );
 
 -- Cloud storage connections
