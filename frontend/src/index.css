@@ -51,6 +51,40 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+/* === Dark Mode Override === */
+
+.dark {
+  --color-warm-50: #1a1410;
+  --color-warm-100: #231c15;
+  --color-warm-200: #2e241b;
+  --color-warm-300: #3d3026;
+  --color-warm-400: #5c4a3a;
+  --color-warm-500: #7a6350;
+  --color-warm-600: #9a8068;
+  --color-warm-700: #b9a08a;
+  --color-warm-800: #d4c0ad;
+  --color-warm-900: #ebe0d4;
+  --color-warm-950: #f8f3ee;
+
+  --color-sand-50: #1e1915;
+  --color-sand-100: #27211b;
+  --color-sand-200: #342c23;
+  --color-sand-300: #4a3f33;
+  --color-sand-400: #6b5d4d;
+  --color-sand-500: #8d7c68;
+  --color-sand-600: #a99582;
+  --color-sand-700: #c4b19e;
+  --color-sand-800: #ddd0c2;
+  --color-sand-900: #f0e9e0;
+  --color-sand-950: #faf7f3;
+}
+
+.dark body,
+body.dark {
+  background-color: var(--color-warm-50);
+  color: var(--color-warm-950);
+}
+
 /* Scrollbar styling for warm theme */
 ::-webkit-scrollbar {
   width: 8px;

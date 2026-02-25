@@ -1,6 +1,9 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { ThemeProvider } from './lib/theme';
+import { AuthProvider, useAuth } from './lib/auth';
 import Sidebar from './components/Sidebar';
 import Header from './components/Header';
+import LoginPage from './pages/LoginPage';
 import Dashboard from './pages/Dashboard';
 import Emails from './pages/Emails';
 import Documents from './pages/Documents';
@@ -10,9 +13,27 @@ import ReggiePage from './pages/ReggiePage';
 import LogsPage from './pages/LogsPage';
 import SettingsPage from './pages/SettingsPage';
 
-function App() {
+function AuthGuard({ children }: { children: React.ReactNode }) {
+  const { authenticated, setupCompleted, loading } = useAuth();
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-warm-50 flex items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-2 border-sunset-400 border-t-transparent" />
+      </div>
+    );
+  }
+
+  if (!authenticated) {
+    return <LoginPage />;
+  }
+
+  return <>{children}</>;
+}
+
+function AppLayout() {
   return (
-    <BrowserRouter>
+    <AuthGuard>
       <div className="flex min-h-screen bg-warm-50">
         <Sidebar />
         <div className="flex-1 ml-64 flex flex-col">
@@ -31,7 +52,19 @@ function App() {
           </main>
         </div>
       </div>
-    </BrowserRouter>
+    </AuthGuard>
+  );
+}
+
+function App() {
+  return (
+    <ThemeProvider>
+      <AuthProvider>
+        <BrowserRouter>
+          <AppLayout />
+        </BrowserRouter>
+      </AuthProvider>
+    </ThemeProvider>
   );
 }
 

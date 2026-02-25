@@ -112,6 +112,46 @@ class SchedulerConfig(BaseModel):
     max_retries: int = 3
 
 
+class CloudStorageProviderConfig(BaseModel):
+    """Configuration for a cloud storage provider connection."""
+    id: str = Field(default_factory=lambda: secrets.token_hex(8))
+    provider: str = ""  # onedrive, google_drive
+    enabled: bool = True
+    connected: bool = False
+    # OAuth2 tokens stored encrypted separately via CredentialManager
+    client_id: str = ""
+    client_secret: str = ""
+    sync_enabled: bool = True
+    sync_folder: str = "Regia"  # Folder name in cloud storage
+    sync_mode: str = "upload"  # upload = local -> cloud
+    last_sync_at: Optional[str] = None
+
+
+class CloudStorageConfig(BaseModel):
+    """Configuration for cloud storage integrations."""
+    providers: List[CloudStorageProviderConfig] = Field(default_factory=list)
+    sync_on_ingest: bool = True  # Auto-sync when new documents arrive
+    sync_interval_minutes: int = 30
+
+
+class AuthConfig(BaseModel):
+    """User authentication configuration."""
+    enabled: bool = True
+    username: str = ""
+    # Password hash stored via security module
+    session_timeout_minutes: int = 480  # 8 hours
+    require_login: bool = True
+    setup_completed: bool = False
+
+
+class UIConfig(BaseModel):
+    """UI preferences."""
+    theme: str = "light"  # light, dark
+    accent_color: str = "sunset"  # sunset, warm, sand
+    sidebar_collapsed: bool = False
+    language: str = "en"
+
+
 class SecurityConfig(BaseModel):
     """Security configuration."""
     encryption_enabled: bool = True
@@ -120,6 +160,8 @@ class SecurityConfig(BaseModel):
     # One-way data flow enforcement
     allow_write_back: bool = False  # NEVER allow writing back to email
     allow_outbound_connections: bool = True  # For invoice link downloads
+    # Reggie is fully offline — no external LLM APIs
+    reggie_offline_only: bool = True
 
 
 class AppSettings(BaseSettings):
@@ -139,6 +181,12 @@ class AppSettings(BaseSettings):
     search: SearchConfig = Field(default_factory=SearchConfig)
     scheduler: SchedulerConfig = Field(default_factory=SchedulerConfig)
     security: SecurityConfig = Field(default_factory=SecurityConfig)
+    cloud_storage: CloudStorageConfig = Field(default_factory=CloudStorageConfig)
+    auth: AuthConfig = Field(default_factory=AuthConfig)
+    ui: UIConfig = Field(default_factory=UIConfig)
+
+    # Auto-start Ollama when Regia starts
+    auto_start_ollama: bool = True
 
     email_accounts: List[EmailAccountConfig] = Field(default_factory=list)
 

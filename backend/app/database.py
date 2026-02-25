@@ -166,6 +166,50 @@ CREATE TABLE IF NOT EXISTS scheduler_jobs (
     run_count INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
+
+-- User accounts (for login authentication)
+CREATE TABLE IF NOT EXISTS users (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    username TEXT NOT NULL UNIQUE,
+    password_hash TEXT NOT NULL,
+    display_name TEXT DEFAULT '',
+    is_admin INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    last_login_at TEXT
+);
+
+-- Active sessions
+CREATE TABLE IF NOT EXISTS sessions (
+    token TEXT PRIMARY KEY,
+    user_id INTEGER NOT NULL REFERENCES users(id),
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    expires_at TEXT NOT NULL
+);
+
+-- Cloud storage connections
+CREATE TABLE IF NOT EXISTS cloud_storage_connections (
+    id TEXT PRIMARY KEY,
+    provider TEXT NOT NULL,  -- onedrive, google_drive
+    display_name TEXT DEFAULT '',
+    connected INTEGER NOT NULL DEFAULT 0,
+    last_sync_at TEXT,
+    sync_folder TEXT DEFAULT 'Regia',
+    total_synced INTEGER DEFAULT 0,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- Cloud sync log (tracks which documents have been synced)
+CREATE TABLE IF NOT EXISTS cloud_sync_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    connection_id TEXT NOT NULL REFERENCES cloud_storage_connections(id),
+    document_id INTEGER NOT NULL REFERENCES documents(id),
+    cloud_path TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending',  -- pending, synced, error
+    synced_at TEXT,
+    cloud_file_id TEXT DEFAULT '',
+    error_message TEXT DEFAULT '',
+    UNIQUE(connection_id, document_id)
+);
 """
 
 

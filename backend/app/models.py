@@ -207,3 +207,72 @@ class LogListResponse(BaseModel):
     total: int
     page: int
     page_size: int
+
+
+# === Auth Models ===
+
+class UserSetup(BaseModel):
+    username: str
+    password: str
+    display_name: str = ""
+
+
+class LoginRequest(BaseModel):
+    username: str
+    password: str
+
+
+class LoginResponse(BaseModel):
+    token: str
+    username: str
+    display_name: str
+    expires_at: str
+
+
+class ChangePasswordRequest(BaseModel):
+    old_password: str
+    new_password: str
+
+
+# === Cloud Storage Models ===
+
+class CloudStorageConnect(BaseModel):
+    provider: str  # onedrive, google_drive
+    client_id: str = ""
+    client_secret: str = ""
+
+
+class CloudStorageConnection(BaseModel):
+    id: str
+    provider: str
+    display_name: str
+    connected: bool
+    last_sync_at: Optional[str]
+    sync_folder: str
+    total_synced: int
+
+
+class CloudSyncRequest(BaseModel):
+    connection_id: str
+
+
+# === OAuth2 Models ===
+
+class OAuth2StartRequest(BaseModel):
+    flow_type: str  # cloud_storage, email
+    provider: str  # onedrive, google_drive, gmail, outlook
+    client_id: str = ""
+    client_secret: str = ""
+
+
+class OAuth2StartResponse(BaseModel):
+    url: str
+    state: str
+
+
+# === UI Preferences ===
+
+class UIPreferences(BaseModel):
+    theme: str = "light"  # light, dark
+    accent_color: str = "sunset"
+    sidebar_collapsed: bool = False

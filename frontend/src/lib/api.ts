@@ -6,6 +6,35 @@ const api = axios.create({
   headers: { 'Content-Type': 'application/json' },
 });
 
+// Attach auth token to every request
+api.interceptors.request.use((config) => {
+  const token = localStorage.getItem('regia_token');
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
+
+// === Auth ===
+export const getAuthStatus = () => api.get('/auth/status');
+export const setupUser = (data: any) => api.post('/auth/setup', data);
+export const login = (data: any) => api.post('/auth/login', data);
+export const logout = () => api.post('/auth/logout');
+export const changePassword = (data: any) => api.post('/auth/change-password', data);
+
+// === UI Preferences ===
+export const getUIPreferences = () => api.get('/ui/preferences');
+export const updateUIPreferences = (data: any) => api.put('/ui/preferences', data);
+
+// === Cloud Storage ===
+export const getCloudProviders = () => api.get('/cloud-storage/providers');
+export const getEmailProviders = () => api.get('/cloud-storage/email-providers');
+export const getCloudConnections = () => api.get('/cloud-storage/connections');
+export const createCloudConnection = (data: any) => api.post('/cloud-storage/connect', data);
+export const deleteCloudConnection = (id: string) => api.delete(`/cloud-storage/connections/${id}`);
+export const startOAuth2Flow = (data: any) => api.post('/cloud-storage/oauth2/start', data);
+export const getCloudSyncStatus = (id: string) => api.get(`/cloud-storage/sync/${id}/status`);
+
 // === Dashboard ===
 export const getDashboard = () => api.get('/dashboard');
 export const getHealth = () => api.get('/health');

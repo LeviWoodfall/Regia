@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react';
 import {
   Shield, Lock, Unlock, Mail, Plus, Trash2, Save, Eye, EyeOff,
-  Brain, Clock, FolderOpen,
+  Brain, Clock, FolderOpen, Cloud, ExternalLink, Link2,
 } from 'lucide-react';
 import {
   getStatus, setupMasterPassword, unlock as apiUnlock, lock as apiLock,
   getAccounts, addAccount, deleteAccount, storeCredentials, getConfig, updateConfig,
+  getCloudProviders, getCloudConnections, createCloudConnection, deleteCloudConnection,
+  startOAuth2Flow, getEmailProviders,
 } from '../lib/api';
 
 export default function SettingsPage() {
@@ -27,6 +29,11 @@ export default function SettingsPage() {
   });
   const [appPassword, setAppPassword] = useState('');
   const [showAddAccount, setShowAddAccount] = useState(false);
+
+  // Cloud storage
+  const [cloudProviders, setCloudProviders] = useState<any[]>([]);
+  const [cloudConnections, setCloudConnections] = useState<any[]>([]);
+  const [emailProviders, setEmailProviders] = useState<any[]>([]);
 
   const loadStatus = async () => {
     try {
@@ -51,11 +58,65 @@ export default function SettingsPage() {
     } catch { /* ignore */ }
   };
 
+  const loadCloudData = async () => {
+    try {
+      const [provResp, connResp, emailProvResp] = await Promise.all([
+        getCloudProviders(),
+        getCloudConnections(),
+        getEmailProviders(),
+      ]);
+      setCloudProviders(provResp.data.providers || []);
+      setCloudConnections(connResp.data.connections || []);
+      setEmailProviders(emailProvResp.data.providers || []);
+    } catch { /* ignore */ }
+  };
+
   useEffect(() => {
     loadStatus();
     loadAccounts();
     loadConfig();
+    loadCloudData();
   }, []);
+
+  const handleConnectCloud = async (provider: string) => {
+    try {
+      // Create the connection record
+      await createCloudConnection({ provider });
+      // Start OAuth2 flow
+      const resp = await startOAuth2Flow({
+        flow_type: 'cloud_storage',
+        provider,
+      });
+      // Open OAuth consent in new window
+      window.open(resp.data.url, '_blank', 'width=600,height=700');
+      setMessage('Complete authorization in the popup window, then refresh.');
+      // Reload connections after a delay
+      setTimeout(() => loadCloudData(), 5000);
+    } catch {
+      setMessage('Failed to start cloud connection');
+    }
+  };
+
+  const handleConnectEmail = async (provider: string) => {
+    try {
+      const resp = await startOAuth2Flow({
+        flow_type: 'email',
+        provider,
+      });
+      window.open(resp.data.url, '_blank', 'width=600,height=700');
+      setMessage('Complete authorization in the popup window.');
+    } catch {
+      setMessage('Failed to start email connection');
+    }
+  };
+
+  const handleDeleteCloud = async (id: string) => {
+    try {
+      await deleteCloudConnection(id);
+      setMessage('Cloud connection removed');
+      loadCloudData();
+    } catch { /* ignore */ }
+  };
 
   const handleSetup = async () => {
     if (!password) return;
@@ -130,6 +191,7 @@ export default function SettingsPage() {
   const tabs = [
     { id: 'security', label: 'Security', icon: Shield },
     { id: 'accounts', label: 'Email Accounts', icon: Mail },
+    { id: 'cloud', label: 'Cloud Storage', icon: Cloud },
     { id: 'llm', label: 'LLM / AI', icon: Brain },
     { id: 'storage', label: 'Storage', icon: FolderOpen },
     { id: 'scheduler', label: 'Scheduler', icon: Clock },
@@ -439,6 +501,115 @@ export default function SettingsPage() {
               className="flex items-center gap-2 px-4 py-2 bg-sunset-500 text-white rounded-xl text-sm font-medium hover:bg-sunset-600 transition-colors">
               <Save className="w-4 h-4" /> Save Configuration
             </button>
+          </div>
+        )}
+
+        {/* === Cloud Storage Tab === */}
+        {tab === 'cloud' && (
+          <div className="space-y-6">
+            <div>
+              <h3 className="text-lg font-semibold text-warm-900 flex items-center gap-2">
+                <Cloud className="w-5 h-5 text-sunset-500" /> Cloud Storage
+              </h3>
+              <p className="text-sm text-sand-500 mt-1">
+                Securely sync your documents to OneDrive or Google Drive
+              </p>
+            </div>
+
+            {/* Connect Buttons */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <button
+                onClick={() => handleConnectCloud('onedrive')}
+                className="flex items-center gap-3 px-5 py-4 bg-[#0078d4]/5 border-2 border-[#0078d4]/20
+                           rounded-xl hover:bg-[#0078d4]/10 hover:border-[#0078d4]/40 transition-all group"
+              >
+                <div className="w-10 h-10 rounded-lg bg-[#0078d4] flex items-center justify-center shrink-0">
+                  <Cloud className="w-5 h-5 text-white" />
+                </div>
+                <div className="text-left">
+                  <p className="text-sm font-semibold text-warm-900 group-hover:text-[#0078d4]">Connect with Microsoft</p>
+                  <p className="text-[11px] text-sand-500">OneDrive</p>
+                </div>
+                <ExternalLink className="w-4 h-4 text-sand-400 ml-auto" />
+              </button>
+
+              <button
+                onClick={() => handleConnectCloud('google_drive')}
+                className="flex items-center gap-3 px-5 py-4 bg-[#4285f4]/5 border-2 border-[#4285f4]/20
+                           rounded-xl hover:bg-[#4285f4]/10 hover:border-[#4285f4]/40 transition-all group"
+              >
+                <div className="w-10 h-10 rounded-lg bg-[#4285f4] flex items-center justify-center shrink-0">
+                  <Cloud className="w-5 h-5 text-white" />
+                </div>
+                <div className="text-left">
+                  <p className="text-sm font-semibold text-warm-900 group-hover:text-[#4285f4]">Connect with Google</p>
+                  <p className="text-[11px] text-sand-500">Google Drive</p>
+                </div>
+                <ExternalLink className="w-4 h-4 text-sand-400 ml-auto" />
+              </button>
+            </div>
+
+            {/* Active Connections */}
+            {cloudConnections.length > 0 && (
+              <div className="space-y-2">
+                <h4 className="text-sm font-medium text-warm-800">Active Connections</h4>
+                {cloudConnections.map((conn: any) => (
+                  <div key={conn.id} className="flex items-center justify-between px-4 py-3 bg-sand-50 rounded-xl border border-sand-200">
+                    <div className="flex items-center gap-3">
+                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
+                        conn.provider === 'onedrive' ? 'bg-[#0078d4]' : 'bg-[#4285f4]'
+                      }`}>
+                        <Cloud className="w-4 h-4 text-white" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium text-warm-900">{conn.display_name}</p>
+                        <p className="text-[11px] text-sand-500">
+                          {conn.connected ? 'Connected' : 'Pending'}
+                          {conn.total_synced > 0 && ` \u00B7 ${conn.total_synced} files synced`}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${
+                        conn.connected ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'
+                      }`}>
+                        {conn.connected ? 'Active' : 'Pending'}
+                      </span>
+                      <button
+                        onClick={() => handleDeleteCloud(conn.id)}
+                        className="p-1.5 rounded-lg hover:bg-red-100 text-sand-400 hover:text-red-500 transition-colors"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Email OAuth Connect Buttons */}
+            <div className="pt-4 border-t border-sand-200">
+              <h4 className="text-sm font-medium text-warm-800 mb-3 flex items-center gap-2">
+                <Link2 className="w-4 h-4 text-sunset-500" /> Connect Email via OAuth2
+              </h4>
+              <p className="text-xs text-sand-500 mb-3">Sign in securely with your email provider — no app passwords needed</p>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => handleConnectEmail('outlook')}
+                  className="flex items-center gap-2 px-4 py-2.5 bg-[#0078d4]/10 border border-[#0078d4]/20
+                             rounded-xl text-sm font-medium text-[#0078d4] hover:bg-[#0078d4]/20 transition-colors"
+                >
+                  <Mail className="w-4 h-4" /> Connect with Microsoft
+                </button>
+                <button
+                  onClick={() => handleConnectEmail('gmail')}
+                  className="flex items-center gap-2 px-4 py-2.5 bg-[#4285f4]/10 border border-[#4285f4]/20
+                             rounded-xl text-sm font-medium text-[#4285f4] hover:bg-[#4285f4]/20 transition-colors"
+                >
+                  <Mail className="w-4 h-4" /> Connect with Google
+                </button>
+              </div>
+            </div>
           </div>
         )}
 

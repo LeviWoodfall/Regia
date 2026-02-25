@@ -17,7 +17,10 @@ from app.config import load_config, save_config, AppSettings, APP_DATA_DIR, DEFA
 from app.database import Database
 from app.search.engine import SearchEngine
 from app.llm.agent import ReggieAgent
+from app.llm.ollama_manager import OllamaManager
 from app.scheduler.jobs import EmailScheduler
+from app.auth import AuthManager
+from app.cloud_storage.sync import CloudSyncEngine
 
 # === Logging Setup ===
 
@@ -67,11 +70,31 @@ async def lifespan(app: FastAPI):
     db = Database(settings.db_path)
     logger.info(f"Database initialized at {settings.db_path}")
 
+    # Auto-start Ollama if configured
+    ollama_manager = OllamaManager(
+        base_url=settings.llm.ollama_base_url,
+        model_name=settings.llm.model_name,
+    )
+    if settings.auto_start_ollama:
+        if not await ollama_manager.is_running():
+            logger.info("Starting Ollama AI engine...")
+            ollama_manager.start()
+        else:
+            logger.info("Ollama AI engine already running")
+        # Ensure model is available
+        await ollama_manager.ensure_model()
+
     # Initialize search engine
     search_engine = SearchEngine(db, settings.search)
 
     # Initialize Reggie agent
     agent = ReggieAgent(db, settings.llm)
+
+    # Initialize auth manager
+    auth_manager = AuthManager(db, settings.auth.session_timeout_minutes)
+
+    # Initialize cloud sync engine
+    cloud_sync = CloudSyncEngine(db)
 
     # Initialize scheduler
     scheduler = EmailScheduler(db, settings)
@@ -87,6 +110,9 @@ async def lifespan(app: FastAPI):
     app_state["db"] = db
     app_state["search_engine"] = search_engine
     app_state["agent"] = agent
+    app_state["auth_manager"] = auth_manager
+    app_state["cloud_sync"] = cloud_sync
+    app_state["ollama_manager"] = ollama_manager
     app_state["scheduler"] = scheduler
 
     logger.info(f"{__app_name__} is ready at http://{settings.host}:{settings.port}")
@@ -96,6 +122,8 @@ async def lifespan(app: FastAPI):
     # --- Shutdown ---
     logger.info(f"Shutting down {__app_name__}...")
     scheduler.stop()
+    if ollama_manager.managed:
+        ollama_manager.stop()
     logger.info("Shutdown complete")
 
 
@@ -120,13 +148,18 @@ app.add_middleware(
 # === Register Routes ===
 
 from app.routes import settings, emails, documents, search, agent, files  # noqa: E402
+from app.routes import auth as auth_routes  # noqa: E402
+from app.routes import cloud_storage as cloud_routes  # noqa: E402
 
+app.include_router(auth_routes.router)
 app.include_router(settings.router)
 app.include_router(emails.router)
 app.include_router(documents.router)
 app.include_router(search.router)
 app.include_router(agent.router)
 app.include_router(files.router)
+app.include_router(cloud_routes.router)
+app.include_router(cloud_routes.oauth_router)
 
 
 # === Root Routes ===
@@ -134,12 +167,39 @@ app.include_router(files.router)
 @app.get("/api/health")
 async def health_check():
     """Health check endpoint."""
+    ollama_mgr = app_state.get("ollama_manager")
     return {
         "status": "ok",
         "app": __app_name__,
         "version": __version__,
         "agent": __agent_name__,
+        "ollama_running": await ollama_mgr.is_running() if ollama_mgr else False,
     }
+
+
+@app.get("/api/ui/preferences")
+async def get_ui_preferences():
+    """Get UI preferences (theme, accent color)."""
+    settings = app_state["settings"]
+    return {
+        "theme": settings.ui.theme,
+        "accent_color": settings.ui.accent_color,
+        "sidebar_collapsed": settings.ui.sidebar_collapsed,
+    }
+
+
+@app.put("/api/ui/preferences")
+async def update_ui_preferences(prefs: dict):
+    """Update UI preferences."""
+    settings = app_state["settings"]
+    if "theme" in prefs:
+        settings.ui.theme = prefs["theme"]
+    if "accent_color" in prefs:
+        settings.ui.accent_color = prefs["accent_color"]
+    if "sidebar_collapsed" in prefs:
+        settings.ui.sidebar_collapsed = prefs["sidebar_collapsed"]
+    save_config(settings)
+    return {"message": "Preferences saved", "theme": settings.ui.theme}
 
 
 @app.get("/api/dashboard")
