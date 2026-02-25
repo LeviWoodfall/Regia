@@ -1,12 +1,15 @@
 import { useState, useRef, useEffect } from 'react';
-import { Send, Bot, User, Sparkles, Trash2 } from 'lucide-react';
-import { chatWithReggie, getAgentStatus, clearChatHistory } from '../lib/api';
+import { Send, Bot, User, Sparkles, Trash2, Brain, BookOpen, ChevronDown, ChevronUp, X } from 'lucide-react';
+import { chatWithReggie, getAgentStatus, clearChatHistory, getMemories, deleteMemory } from '../lib/api';
 
 interface Message {
   role: 'user' | 'assistant';
   content: string;
   sources?: any[];
   suggestions?: string[];
+  learned?: any[];
+  memory_count?: number;
+  knowledge_count?: number;
 }
 
 export default function ReggiePage() {
@@ -16,16 +19,24 @@ export default function ReggiePage() {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [agentAvailable, setAgentAvailable] = useState<boolean | null>(null);
   const [agentModel, setAgentModel] = useState('');
+  const [memoryStats, setMemoryStats] = useState<any>(null);
+  const [knowledgeStats, setKnowledgeStats] = useState<any>(null);
+  const [showMemoryPanel, setShowMemoryPanel] = useState(false);
+  const [memories, setMemories] = useState<any[]>([]);
   const messagesEnd = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
+  const loadStatus = () => {
     getAgentStatus()
       .then(r => {
         setAgentAvailable(r.data.available);
         setAgentModel(r.data.model || '');
+        setMemoryStats(r.data.memory_stats || null);
+        setKnowledgeStats(r.data.knowledge_stats || null);
       })
       .catch(() => setAgentAvailable(false));
-  }, []);
+  };
+
+  useEffect(() => { loadStatus(); }, []);
 
   useEffect(() => {
     messagesEnd.current?.scrollIntoView({ behavior: 'smooth' });
@@ -53,8 +64,13 @@ export default function ReggiePage() {
         content: data.message,
         sources: data.sources,
         suggestions: data.suggestions,
+        learned: data.learned,
+        memory_count: data.memory_count,
+        knowledge_count: data.knowledge_count,
       };
       setMessages(prev => [...prev, assistantMsg]);
+      // Refresh stats after learning
+      if (data.learned?.length) loadStatus();
     } catch {
       setMessages(prev => [...prev, {
         role: 'assistant',
@@ -99,15 +115,81 @@ export default function ReggiePage() {
             </p>
           </div>
         </div>
-        {messages.length > 0 && (
-          <button
-            onClick={handleClear}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-sand-500 hover:text-warm-700 hover:bg-sand-100 rounded-lg transition-colors"
-          >
-            <Trash2 className="w-3.5 h-3.5" /> Clear
-          </button>
-        )}
+        <div className="flex items-center gap-2">
+          {memoryStats && (memoryStats.total > 0 || (knowledgeStats && knowledgeStats.total > 0)) && (
+            <button
+              onClick={async () => {
+                setShowMemoryPanel(!showMemoryPanel);
+                if (!showMemoryPanel) {
+                  try {
+                    const r = await getMemories();
+                    setMemories(r.data.memories || []);
+                  } catch { /* ignore */ }
+                }
+              }}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-sunset-600 hover:text-sunset-700 bg-sunset-50 hover:bg-sunset-100 rounded-lg transition-colors"
+              title="Reggie's memory & knowledge"
+            >
+              <Brain className="w-3.5 h-3.5" />
+              {memoryStats.total > 0 && <span>{memoryStats.total} memories</span>}
+              {knowledgeStats?.total > 0 && <span className="text-sand-400">·</span>}
+              {knowledgeStats?.total > 0 && <span>{knowledgeStats.total} facts</span>}
+            </button>
+          )}
+          {messages.length > 0 && (
+            <button
+              onClick={handleClear}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-sand-500 hover:text-warm-700 hover:bg-sand-100 rounded-lg transition-colors"
+            >
+              <Trash2 className="w-3.5 h-3.5" /> Clear
+            </button>
+          )}
+        </div>
       </div>
+
+      {/* Memory Panel */}
+      {showMemoryPanel && (
+        <div className="mb-3 bg-sunset-50 border border-sunset-200 rounded-xl p-4 max-h-60 overflow-y-auto">
+          <div className="flex items-center justify-between mb-2">
+            <h4 className="text-sm font-semibold text-warm-900 flex items-center gap-1.5">
+              <Brain className="w-4 h-4 text-sunset-500" /> Reggie's Memory
+            </h4>
+            <button onClick={() => setShowMemoryPanel(false)} className="text-sand-400 hover:text-warm-600">
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+          {memories.length === 0 ? (
+            <p className="text-xs text-sand-500">No memories yet. Chat with Reggie to help him learn!</p>
+          ) : (
+            <div className="space-y-1.5">
+              {memories.map((m: any) => (
+                <div key={m.id} className="flex items-start justify-between gap-2 text-xs">
+                  <div className="flex-1 min-w-0">
+                    <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-medium mr-1.5 ${
+                      m.memory_type === 'preference' ? 'bg-blue-100 text-blue-700' :
+                      m.memory_type === 'instruction' ? 'bg-purple-100 text-purple-700' :
+                      m.memory_type === 'correction' ? 'bg-yellow-100 text-yellow-700' :
+                      'bg-sand-200 text-sand-600'
+                    }`}>{m.memory_type}</span>
+                    <span className="text-warm-700">{m.content}</span>
+                  </div>
+                  <button
+                    onClick={async () => {
+                      await deleteMemory(m.id);
+                      setMemories(prev => prev.filter(x => x.id !== m.id));
+                      loadStatus();
+                    }}
+                    className="text-sand-400 hover:text-red-500 shrink-0 p-0.5"
+                    title="Delete memory"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Messages Area */}
       <div className="flex-1 overflow-y-auto rounded-2xl bg-white border border-sand-200 shadow-sm">
@@ -119,7 +201,8 @@ export default function ReggiePage() {
               </div>
               <h3 className="text-lg font-semibold text-warm-900">Hey, I'm Reggie!</h3>
               <p className="text-sm text-sand-500 mt-1 max-w-md">
-                I can help you find documents, search through emails, and answer questions about your ingested data. Try asking me something!
+                I can help you find documents, search through emails, and answer questions about your ingested data.
+                I learn from our conversations and from your documents — the more we chat, the smarter I get!
               </p>
               <div className="flex flex-wrap gap-2 mt-6 justify-center">
                 {[
@@ -161,6 +244,25 @@ export default function ReggiePage() {
                           • {s.title} ({s.type})
                         </p>
                       ))}
+                    </div>
+                  )}
+
+                  {/* Learning indicator */}
+                  {msg.learned && msg.learned.length > 0 && (
+                    <div className="mt-2 pt-2 border-t border-sunset-200/50">
+                      <p className="text-[10px] font-medium text-sunset-500 flex items-center gap-1">
+                        <Brain className="w-3 h-3" /> Learned {msg.learned.length} new thing{msg.learned.length > 1 ? 's' : ''}
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Context indicator */}
+                  {msg.role === 'assistant' && (msg.memory_count || 0) + (msg.knowledge_count || 0) > 0 && (
+                    <div className="mt-1">
+                      <p className="text-[10px] text-sand-400 flex items-center gap-1">
+                        <BookOpen className="w-3 h-3" />
+                        Used {msg.memory_count || 0} memories, {msg.knowledge_count || 0} knowledge facts
+                      </p>
                     </div>
                   )}
 

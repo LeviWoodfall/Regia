@@ -41,6 +41,7 @@ class ProcessingPipeline:
         self.db = db
         self.settings = settings
         self._classifier = None
+        self._learning = None
 
     def _get_classifier(self):
         """Lazy-load the LLM classifier."""
@@ -48,6 +49,13 @@ class ProcessingPipeline:
             from app.llm.classifier import DocumentClassifier
             self._classifier = DocumentClassifier(self.settings.llm)
         return self._classifier
+
+    def _get_learning(self):
+        """Lazy-load the learning module."""
+        if self._learning is None:
+            from app.llm.learning import ReggieLearning
+            self._learning = ReggieLearning(self.db, self.settings.llm)
+        return self._learning
 
     async def process_email(self, email_id: int, parsed: ParsedEmail) -> Dict[str, Any]:
         """
@@ -115,6 +123,19 @@ class ProcessingPipeline:
                 )
             except Exception as e:
                 logger.warning(f"LLM classification failed for email {email_id}: {e}")
+
+            # 4. Extract knowledge from email for Reggie's learning
+            try:
+                learning = self._get_learning()
+                await learning.extract_email_knowledge(
+                    email_id=email_id,
+                    subject=parsed.subject,
+                    sender=parsed.sender_name or parsed.sender_email,
+                    date=parsed.date or "",
+                    body=parsed.body_text,
+                )
+            except Exception as e:
+                logger.debug(f"Email knowledge extraction skipped: {e}")
 
             # Update status
             status = "completed" if not result["errors"] else "error"
@@ -238,6 +259,20 @@ class ProcessingPipeline:
             status="success",
             message=f"Saved '{attachment.filename}' ({file_type}, {attachment.size} bytes, hash={file_hash[:16]}...)",
         )
+
+        # Extract knowledge from document for Reggie's learning
+        if ocr_text and len(ocr_text.strip()) >= 50:
+            try:
+                learning = self._get_learning()
+                await learning.extract_document_knowledge(
+                    document_id=doc_id,
+                    filename=attachment.filename,
+                    text=ocr_text,
+                    classification=classification,
+                    email_id=email_id,
+                )
+            except Exception as e:
+                logger.debug(f"Document knowledge extraction skipped: {e}")
 
         return doc_id
 

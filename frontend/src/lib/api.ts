@@ -105,6 +105,11 @@ export const getAgentStatus = () => api.get('/agent/status');
 export const chatWithReggie = (data: any) => api.post('/agent/chat', data);
 export const getChatHistory = (sessionId: string) => api.get(`/agent/history/${sessionId}`);
 export const clearChatHistory = (sessionId: string) => api.delete(`/agent/history/${sessionId}`);
+export const getMemories = () => api.get('/agent/memory');
+export const deleteMemory = (id: number) => api.delete(`/agent/memory/${id}`);
+export const clearAllMemories = () => api.delete('/agent/memory');
+export const getKnowledge = () => api.get('/agent/knowledge');
+export const clearAllKnowledge = () => api.delete('/agent/knowledge');
 
 // === Files ===
 export const browseFiles = (path?: string) =>

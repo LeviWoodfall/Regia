@@ -138,6 +138,9 @@ class ChatResponse(BaseModel):
     session_id: str
     sources: List[Dict[str, Any]] = Field(default_factory=list)
     suggestions: List[str] = Field(default_factory=list)
+    learned: List[Dict[str, Any]] = Field(default_factory=list)
+    memory_count: int = 0
+    knowledge_count: int = 0
 
 
 # === Settings Models ===

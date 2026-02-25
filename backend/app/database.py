@@ -202,6 +202,88 @@ CREATE TABLE IF NOT EXISTS email_rules (
     match_count INTEGER NOT NULL DEFAULT 0
 );
 
+-- Reggie persistent memory (learned from conversations)
+CREATE TABLE IF NOT EXISTS reggie_memory (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    memory_type TEXT NOT NULL DEFAULT 'fact',  -- fact, preference, correction, instruction
+    content TEXT NOT NULL,
+    source TEXT NOT NULL DEFAULT 'conversation',  -- conversation, document, system
+    source_id TEXT DEFAULT '',  -- session_id or document_id
+    confidence REAL NOT NULL DEFAULT 0.8,
+    access_count INTEGER NOT NULL DEFAULT 0,
+    last_accessed_at TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- FTS for memory recall
+CREATE VIRTUAL TABLE IF NOT EXISTS reggie_memory_fts USING fts5(
+    content,
+    memory_type,
+    content='reggie_memory',
+    content_rowid='id',
+    tokenize='porter unicode61'
+);
+
+CREATE TRIGGER IF NOT EXISTS reggie_memory_ai AFTER INSERT ON reggie_memory BEGIN
+    INSERT INTO reggie_memory_fts(rowid, content, memory_type)
+    VALUES (new.id, new.content, new.memory_type);
+END;
+
+CREATE TRIGGER IF NOT EXISTS reggie_memory_ad AFTER DELETE ON reggie_memory BEGIN
+    INSERT INTO reggie_memory_fts(reggie_memory_fts, rowid, content, memory_type)
+    VALUES ('delete', old.id, old.content, old.memory_type);
+END;
+
+CREATE TRIGGER IF NOT EXISTS reggie_memory_au AFTER UPDATE ON reggie_memory BEGIN
+    INSERT INTO reggie_memory_fts(reggie_memory_fts, rowid, content, memory_type)
+    VALUES ('delete', old.id, old.content, old.memory_type);
+    INSERT INTO reggie_memory_fts(rowid, content, memory_type)
+    VALUES (new.id, new.content, new.memory_type);
+END;
+
+-- Reggie knowledge base (extracted from ingested documents)
+CREATE TABLE IF NOT EXISTS reggie_knowledge (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    document_id INTEGER REFERENCES documents(id),
+    email_id INTEGER REFERENCES emails(id),
+    knowledge_type TEXT NOT NULL DEFAULT 'entity',  -- entity, amount, date, summary, relationship, key_term
+    subject TEXT NOT NULL DEFAULT '',   -- what entity/topic this is about
+    predicate TEXT NOT NULL DEFAULT '', -- the relationship or property
+    object TEXT NOT NULL DEFAULT '',    -- the value or related entity
+    raw_text TEXT NOT NULL DEFAULT '',  -- original text snippet for context
+    confidence REAL NOT NULL DEFAULT 0.7,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- FTS for knowledge lookup
+CREATE VIRTUAL TABLE IF NOT EXISTS reggie_knowledge_fts USING fts5(
+    subject,
+    predicate,
+    object,
+    raw_text,
+    content='reggie_knowledge',
+    content_rowid='id',
+    tokenize='porter unicode61'
+);
+
+CREATE TRIGGER IF NOT EXISTS reggie_knowledge_ai AFTER INSERT ON reggie_knowledge BEGIN
+    INSERT INTO reggie_knowledge_fts(rowid, subject, predicate, object, raw_text)
+    VALUES (new.id, new.subject, new.predicate, new.object, new.raw_text);
+END;
+
+CREATE TRIGGER IF NOT EXISTS reggie_knowledge_ad AFTER DELETE ON reggie_knowledge BEGIN
+    INSERT INTO reggie_knowledge_fts(reggie_knowledge_fts, rowid, subject, predicate, object, raw_text)
+    VALUES ('delete', old.id, old.subject, old.predicate, old.object, old.raw_text);
+END;
+
+CREATE TRIGGER IF NOT EXISTS reggie_knowledge_au AFTER UPDATE ON reggie_knowledge BEGIN
+    INSERT INTO reggie_knowledge_fts(reggie_knowledge_fts, rowid, subject, predicate, object, raw_text)
+    VALUES ('delete', old.id, old.subject, old.predicate, old.object, old.raw_text);
+    INSERT INTO reggie_knowledge_fts(rowid, subject, predicate, object, raw_text)
+    VALUES (new.id, new.subject, new.predicate, new.object, new.raw_text);
+END;
+
 -- Password reset tokens
 CREATE TABLE IF NOT EXISTS password_reset_tokens (
     token TEXT PRIMARY KEY,

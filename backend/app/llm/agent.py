@@ -12,11 +12,14 @@ from typing import List, Dict, Any, Optional
 from app.config import LLMConfig
 from app.database import Database
 from app.llm.ollama_client import OllamaClient
+from app.llm.learning import ReggieLearning
 
 logger = logging.getLogger("regia.llm.agent")
 
 SYSTEM_PROMPT = """You are Reggie, the AI assistant for Regia - a document management system.
 Your role is to help users find documents, emails, and information from their ingested data.
+You learn from every conversation and remember what the user tells you across sessions.
+You also learn from ingested documents to build a knowledge base about the user's data.
 
 Guidelines:
 - Be concise and helpful
@@ -24,6 +27,8 @@ Guidelines:
 - If you're unsure, say so rather than guessing
 - You can search through emails, documents, OCR text, and classifications
 - Always cite your sources when providing information from documents
+- Use your memories about the user to personalize responses
+- Reference knowledge you've extracted from their documents when relevant
 - Be warm and professional in tone
 
 When the user asks about a document or information, search the available data and provide
@@ -40,12 +45,12 @@ class ReggieAgent:
         self.db = db
         self.config = config
         self.client = OllamaClient(config)
+        self.learning = ReggieLearning(db, config)
         self._available: Optional[bool] = None
 
     async def is_available(self) -> bool:
-        """Check if Reggie's LLM backend is available."""
-        if self._available is None:
-            self._available = await self.client.is_available()
+        """Check if Reggie's LLM backend is available (re-checks each time)."""
+        self._available = await self.client.is_available()
         return self._available
 
     async def chat(
@@ -70,32 +75,48 @@ class ReggieAgent:
         # 2. Get conversation history
         history = self._get_history(session_id, limit=6)
 
-        # 3. Build context from retrieved documents
+        # 3. Recall memories and knowledge
+        memories = self.learning.recall_memories(message, limit=8)
+        knowledge = self.learning.recall_knowledge(message, limit=10)
+        memory_context = self.learning.build_memory_context(memories, knowledge)
+
+        # 4. Build context from retrieved documents
         doc_context = self._build_context(sources)
 
-        # 4. Generate response
+        # 5. Generate response
         if await self.is_available():
-            response = await self._generate_response(message, history, doc_context)
+            response = await self._generate_response(message, history, doc_context, memory_context)
         else:
             response = self._fallback_response(message, sources)
 
-        # 5. Generate suggestions
+        # 6. Generate suggestions
         suggestions = self._generate_suggestions(message, sources)
 
         # Store assistant message
         self._save_message(session_id, "assistant", response)
+
+        # 7. Learn from this conversation turn (async, non-blocking)
+        learned = []
+        if await self.is_available():
+            try:
+                learned = await self.learning.extract_memories(message, response, session_id)
+            except Exception as e:
+                logger.debug(f"Memory extraction skipped: {e}")
 
         return {
             "message": response,
             "session_id": session_id,
             "sources": sources[:5],
             "suggestions": suggestions,
+            "learned": learned,
+            "memory_count": len(memories),
+            "knowledge_count": len(knowledge),
         }
 
     async def _generate_response(
-        self, message: str, history: List[Dict], doc_context: str
+        self, message: str, history: List[Dict], doc_context: str, memory_context: str = ""
     ) -> str:
-        """Generate a response using the LLM with RAG context."""
+        """Generate a response using the LLM with RAG context + memories + knowledge."""
         # Build chat messages
         messages = []
 
@@ -103,13 +124,17 @@ class ReggieAgent:
         for msg in history[-4:]:
             messages.append({"role": msg["role"], "content": msg["content"]})
 
-        # Build the user message with context
-        user_prompt = message
+        # Build the user message with all context layers
+        context_parts = []
+        if memory_context:
+            context_parts.append(memory_context)
         if doc_context:
-            user_prompt = (
-                f"Context from relevant documents:\n{doc_context}\n\n"
-                f"User question: {message}"
-            )
+            context_parts.append(f"=== Relevant documents ===\n{doc_context}")
+
+        user_prompt = message
+        if context_parts:
+            combined_context = "\n\n".join(context_parts)
+            user_prompt = f"{combined_context}\n\nUser question: {message}"
 
         messages.append({"role": "user", "content": user_prompt})
 
