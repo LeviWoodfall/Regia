@@ -45,7 +45,7 @@ async def download_invoice_from_link(url: str) -> Optional[Dict[str, Any]]:
         ) as client:
             # HEAD request first to check content type and size
             try:
-                head_resp = await client.head(url)
+                head_resp = await client.head(url, headers=_default_headers(url))
                 content_type = head_resp.headers.get("content-type", "").split(";")[0].strip()
                 content_length = int(head_resp.headers.get("content-length", 0))
 
@@ -57,7 +57,7 @@ async def download_invoice_from_link(url: str) -> Optional[Dict[str, Any]]:
                 pass
 
             # Download the file
-            response = await client.get(url)
+            response = await client.get(url, headers=_default_headers(url))
             response.raise_for_status()
 
             content = response.content
@@ -95,11 +95,23 @@ async def download_invoice_from_link(url: str) -> Optional[Dict[str, Any]]:
             }
 
     except httpx.HTTPStatusError as e:
-        logger.error(f"HTTP error downloading {url}: {e.response.status_code}")
+        logger.error(f"HTTP error {e.response.status_code} for {url}")
         return None
     except Exception as e:
         logger.error(f"Failed to download from {url}: {e}")
         return None
+
+
+def _default_headers(url: str) -> Dict[str, str]:
+    """Return browser-like headers to reduce 403/anti-bot blocks."""
+    return {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0 Safari/537.36",
+        "Accept": "application/pdf,application/octet-stream;q=0.9,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Cache-Control": "no-cache",
+        "Pragma": "no-cache",
+        "Referer": url,
+    }
 
 
 def _extract_filename(response: httpx.Response, url: str) -> str:
