@@ -17,6 +17,11 @@ The built-in AI assistant **Reggie** can search across your entire document arch
 - **One-Way Data Flow** — Emails are pulled read-only; no write-back access to your accounts
 - **Multi-Format Document Processing** — PDF, DOCX, XLSX, and images (JPG, PNG, TIFF, BMP, GIF, WEBP)
 - **Invoice Link Detection** — Automatically detects and downloads invoices from email links
+- **Link Capture to PDF** — Print any web link to PDF via headless Chromium (Playwright) and process as attachment
+- **Inline Document Previews** — Preview PDF pages and images directly in the Emails and Documents pages
+- **Attachment Management** — Per-email refresh, bulk refresh-all (background task with live progress), download-all as ZIP
+- **Deduplication** — SHA-256 hash-based dedup for both attachments and invoice links; no duplicate files on disk
+- **Start Ingest Date** — Calendar date picker per account to only ingest emails from a specific date onward
 - **Structured Storage** — Documents stored as `{email}/{date}/{sender}/{subject}/filename`
 - **Full-Text Search** — SQLite FTS5 across emails, documents, OCR text, and AI summaries
 - **Configurable Scheduler** — Control polling frequency, post-processing, and retry behavior

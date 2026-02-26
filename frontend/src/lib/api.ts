@@ -21,7 +21,7 @@ function resolveBaseUrl(): string {
 
 const api = axios.create({
   baseURL: resolveBaseUrl(),
-  timeout: 30000,
+  timeout: 120000,
   headers: { 'Content-Type': 'application/json' },
 });
 
@@ -85,6 +85,7 @@ export const deleteEmail = (id: number, delete_remote: boolean = true) =>
   api.delete(`/emails/${id}`, { params: { delete_remote } });
 export const refreshEmailFiles = (id: number) => api.post(`/emails/${id}/refresh`);
 export const refreshAllAttachments = () => api.post('/emails/refresh-all-attachments');
+export const refreshAllStatus = () => api.get('/emails/refresh-all-attachments/status');
 export const downloadAllEmailDocs = (emailId: number) =>
   api.get(`/documents/email/${emailId}/download-all`, { responseType: 'blob' });
 export const downloadAllAttachments = () =>

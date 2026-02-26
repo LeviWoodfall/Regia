@@ -12,7 +12,13 @@ from app.email_engine.parser import parse_email_message
 from app.processing.pipeline import ProcessingPipeline
 from app.email_engine.parser import Attachment, ParsedEmail
 from datetime import datetime
-from playwright.async_api import async_playwright
+import asyncio
+
+try:
+    from playwright.async_api import async_playwright
+    HAS_PLAYWRIGHT = True
+except ImportError:
+    HAS_PLAYWRIGHT = False
 
 router = APIRouter(prefix="/api/emails", tags=["emails"])
 
@@ -102,14 +108,26 @@ async def list_emails(
 @router.get("/{email_id}")
 async def get_email(email_id: int, db=Depends(get_db)):
     """Get a single email with its documents."""
+    import re
     rows = db.execute("SELECT * FROM emails WHERE id = ?", (email_id,))
     if not rows:
         raise HTTPException(404, "Email not found")
 
-    email_row = rows[0]
+    email_row = dict(rows[0])
     documents = db.execute(
         "SELECT * FROM documents WHERE email_id = ?", (email_id,)
     )
+
+    # Extract invoice/document links from body for frontend preview
+    LINK_PATTERNS = [
+        r'https?://[^\s<>"]+(?:invoice|receipt|statement|bill|document|download|pdf)[^\s<>"]*',
+        r'https?://[^\s<>"]+\.pdf(?:\?[^\s<>"]*)?',
+    ]
+    body = (email_row.get("body_html") or "") + " " + (email_row.get("body_text") or "")
+    links = []
+    for pat in LINK_PATTERNS:
+        links.extend(re.findall(pat, body, re.IGNORECASE))
+    email_row["invoice_links"] = list(dict.fromkeys(links))  # deduplicate, preserve order
 
     return {
         "email": email_row,
@@ -217,27 +235,52 @@ async def refresh_email_files(
     return result
 
 
-@router.post("/refresh-all-attachments")
-async def refresh_all_attachments(db=Depends(get_db), settings=Depends(get_settings)):
-    """Refresh attachments for all emails that have attachments (reprocess from IMAP)."""
-    emails = db.execute("SELECT * FROM emails WHERE has_attachments = 1")
-    if not emails:
-        return {"status": "ok", "processed": 0, "errors": []}
+# Background task state for refresh-all
+_refresh_all_status = {"running": False, "processed": 0, "errors": [], "total": 0}
 
-    processed = 0
-    errors = []
+
+async def _refresh_all_task(db, settings):
+    """Background task to refresh all attachment emails."""
+    global _refresh_all_status
+    emails = db.execute("SELECT * FROM emails WHERE has_attachments = 1")
+    _refresh_all_status = {"running": True, "processed": 0, "errors": [], "total": len(emails)}
+
     for email_row in emails:
         account = next((a for a in settings.email_accounts if a.id == email_row["account_id"]), None)
         if not account:
-            errors.append({"email_id": email_row["id"], "error": "account_not_found"})
+            _refresh_all_status["errors"].append({"email_id": email_row["id"], "error": "account_not_found"})
             continue
-        res = await _refresh_email(email_row, account, db, settings)
-        if res.get("status") == "ok":
-            processed += 1
-        else:
-            errors.append({"email_id": email_row["id"], "error": res.get("error")})
+        try:
+            res = await _refresh_email(email_row, account, db, settings)
+            if res.get("status") == "ok":
+                _refresh_all_status["processed"] += 1
+            else:
+                _refresh_all_status["errors"].append({"email_id": email_row["id"], "error": res.get("error")})
+        except Exception as e:
+            _refresh_all_status["errors"].append({"email_id": email_row["id"], "error": str(e)})
 
-    return {"status": "ok", "processed": processed, "errors": errors}
+    _refresh_all_status["running"] = False
+
+
+@router.post("/refresh-all-attachments")
+async def refresh_all_attachments(db=Depends(get_db), settings=Depends(get_settings)):
+    """Start a background task to refresh attachments for all emails that have attachments."""
+    global _refresh_all_status
+    if _refresh_all_status["running"]:
+        return {"status": "already_running", **_refresh_all_status}
+
+    emails = db.execute("SELECT * FROM emails WHERE has_attachments = 1")
+    if not emails:
+        return {"status": "ok", "processed": 0, "errors": [], "total": 0}
+
+    asyncio.create_task(_refresh_all_task(db, settings))
+    return {"status": "started", "total": len(emails)}
+
+
+@router.get("/refresh-all-attachments/status")
+async def refresh_all_status():
+    """Get the status of the background refresh-all task."""
+    return _refresh_all_status
 
 
 @router.post("/{email_id}/capture-link")
@@ -258,6 +301,8 @@ async def capture_link_to_pdf(
         raise HTTPException(404, "Account not found for this email")
 
     # Render page to PDF with Playwright
+    if not HAS_PLAYWRIGHT:
+        raise HTTPException(500, "Playwright not installed. Run: pip install playwright && python -m playwright install chromium")
     try:
         async with async_playwright() as p:
             browser = await p.chromium.launch(headless=True, args=["--no-sandbox"])

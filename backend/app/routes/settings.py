@@ -93,6 +93,7 @@ async def list_accounts(settings: AppSettings = Depends(get_settings)):
             "post_action_folder": acc.post_action_folder,
             "download_invoice_links": acc.download_invoice_links,
             "max_attachment_size_mb": acc.max_attachment_size_mb,
+            "start_ingest_date": acc.start_ingest_date,
         }
         accounts.append(acct)
     return {"accounts": accounts}
@@ -121,6 +122,7 @@ async def add_account(
         move_to_folder=data.move_to_folder,
         max_attachment_size_mb=data.max_attachment_size_mb,
         download_invoice_links=data.download_invoice_links,
+        start_ingest_date=data.start_ingest_date,
     )
 
     # Auto-detect IMAP server for known providers
@@ -155,7 +157,7 @@ async def update_account(
             updatable = [
                 "name", "enabled", "poll_interval_minutes", "folders",
                 "search_criteria", "only_with_attachments", "max_emails_per_fetch",
-                "skip_older_than_days", "post_action", "post_action_folder",
+                "skip_older_than_days", "start_ingest_date", "post_action", "post_action_folder",
                 "mark_as_read", "move_to_folder", "download_invoice_links",
                 "max_attachment_size_mb",
             ]

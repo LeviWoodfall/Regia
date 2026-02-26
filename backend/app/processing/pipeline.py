@@ -350,11 +350,27 @@ class ProcessingPipeline:
             logger.info(f"Skipping non-PDF invoice link: {link}")
             return None
 
+        # Guard against empty content
+        if not content:
+            logger.warning(f"Skipping empty invoice download for email {email_id}: {link}")
+            return None
+
+        # Compute hash for dedup
+        content_hash = hashlib.sha256(content).hexdigest()
+
+        # Dedup: skip if same email + hash already exists
+        existing_doc = self.db.execute(
+            "SELECT id FROM documents WHERE email_id = ? AND sha256_hash = ? LIMIT 1",
+            (email_id, content_hash),
+        )
+        if existing_doc:
+            return existing_doc[0]["id"]
+
         stored_path = self._build_storage_path(parsed, filename)
         stored_path.parent.mkdir(parents=True, exist_ok=True)
         stored_path.write_bytes(content)
 
-        file_hash = hash_file(str(stored_path))
+        file_hash = content_hash
 
         # OCR and classify
         page_count = get_pdf_page_count(str(stored_path))

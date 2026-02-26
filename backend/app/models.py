@@ -25,6 +25,7 @@ class EmailAccountCreate(BaseModel):
     move_to_folder: str = ""
     max_attachment_size_mb: int = 50
     download_invoice_links: bool = True
+    start_ingest_date: Optional[str] = None  # ISO date string (YYYY-MM-DD)
 
 
 class EmailAccountResponse(BaseModel):

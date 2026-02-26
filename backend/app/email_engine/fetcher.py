@@ -147,7 +147,12 @@ class EmailFetcher:
 
         # Calculate age cutoff if configured
         age_cutoff = None
-        if account.skip_older_than_days and account.skip_older_than_days > 0:
+        if getattr(account, 'start_ingest_date', None):
+            try:
+                age_cutoff = datetime.strptime(account.start_ingest_date, "%Y-%m-%d")
+            except (ValueError, TypeError):
+                pass
+        if age_cutoff is None and account.skip_older_than_days and account.skip_older_than_days > 0:
             age_cutoff = datetime.utcnow() - timedelta(days=account.skip_older_than_days)
 
         effective_action = self._get_effective_post_action(account)

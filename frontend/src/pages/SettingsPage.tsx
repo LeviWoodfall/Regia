@@ -10,7 +10,7 @@ import {
   getCloudProviders, getCloudConnections, createCloudConnection, deleteCloudConnection,
   startOAuth2Flow, getEmailProviders,
   getRules, createRule, updateRule, deleteRule, getRuleFields,
-  getCloudMode, refreshAllAttachments,
+  getCloudMode, refreshAllAttachments, refreshAllStatus,
 } from '../lib/api';
 
 export default function SettingsPage() {
@@ -32,6 +32,7 @@ export default function SettingsPage() {
     folders: ['INBOX'], download_invoice_links: true,
     search_criteria: 'UNSEEN', only_with_attachments: false,
     max_emails_per_fetch: 50, skip_older_than_days: 0,
+    start_ingest_date: '',
     post_action: 'none', post_action_folder: '',
   });
   const [appPassword, setAppPassword] = useState('');
@@ -220,6 +221,7 @@ export default function SettingsPage() {
         folders: ['INBOX'], download_invoice_links: true,
         search_criteria: 'UNSEEN', only_with_attachments: false,
         max_emails_per_fetch: 50, skip_older_than_days: 0,
+        start_ingest_date: '',
         post_action: 'none', post_action_folder: '',
       });
       setAppPassword('');
@@ -396,14 +398,34 @@ export default function SettingsPage() {
               <button
                 onClick={async () => {
                   setRefreshingAll(true);
-                  setMessage('Refreshing all attachments...');
+                  setMessage('Starting background refresh...');
                   try {
-                    await refreshAllAttachments();
-                    setMessage('Refreshed all attachments (dedupbed)');
+                    const resp = await refreshAllAttachments();
+                    const d = resp.data;
+                    if (d.status === 'already_running') {
+                      setMessage(`Refresh already running: ${d.processed}/${d.total} done`);
+                    } else {
+                      setMessage(`Refresh started for ${d.total} emails — runs in background`);
+                    }
+                    // Poll status every 3s
+                    const poll = setInterval(async () => {
+                      try {
+                        const s = (await refreshAllStatus()).data;
+                        setMessage(`Refreshing: ${s.processed}/${s.total} done, ${s.errors?.length || 0} errors`);
+                        if (!s.running) {
+                          clearInterval(poll);
+                          setRefreshingAll(false);
+                          setMessage(`Refresh complete: ${s.processed}/${s.total} processed, ${s.errors?.length || 0} errors`);
+                        }
+                      } catch {
+                        clearInterval(poll);
+                        setRefreshingAll(false);
+                      }
+                    }, 3000);
                   } catch {
-                    setMessage('Failed to refresh attachments');
+                    setMessage('Failed to start refresh');
+                    setRefreshingAll(false);
                   }
-                  setRefreshingAll(false);
                 }}
                 disabled={refreshingAll}
                 className="px-4 py-2 rounded-lg text-xs font-medium bg-sand-100 text-sand-700 hover:bg-sand-200 disabled:opacity-50"
@@ -514,6 +536,13 @@ export default function SettingsPage() {
                         onChange={e => setNewAccount({...newAccount, skip_older_than_days: parseInt(e.target.value) || 0})}
                         className="w-full px-3 py-2 bg-white border border-sand-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-sunset-400/40" />
                       <p className="text-[10px] text-sand-400 mt-0.5">0 = no age limit</p>
+                    </div>
+                    <div>
+                      <label className="text-xs font-medium text-sand-600 mb-1 block">Start Ingest Date</label>
+                      <input type="date" value={newAccount.start_ingest_date}
+                        onChange={e => setNewAccount({...newAccount, start_ingest_date: e.target.value})}
+                        className="w-full px-3 py-2 bg-white border border-sand-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-sunset-400/40" />
+                      <p className="text-[10px] text-sand-400 mt-0.5">Only ingest emails from this date onward (overrides days limit)</p>
                     </div>
                     <div className="flex items-center gap-2 pt-5">
                       <input type="checkbox" id="only_attachments" checked={newAccount.only_with_attachments}
@@ -652,6 +681,12 @@ export default function SettingsPage() {
                             <label className="text-[10px] font-medium text-sand-500 mb-0.5 block">Skip Older (days)</label>
                             <input type="number" min={0} value={editAccount.skip_older_than_days || 0}
                               onChange={e => setEditAccount({...editAccount, skip_older_than_days: parseInt(e.target.value) || 0})}
+                              className="w-full px-2 py-1.5 bg-white border border-sand-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-sunset-400/40" />
+                          </div>
+                          <div>
+                            <label className="text-[10px] font-medium text-sand-500 mb-0.5 block">Start Ingest Date</label>
+                            <input type="date" value={editAccount.start_ingest_date || ''}
+                              onChange={e => setEditAccount({...editAccount, start_ingest_date: e.target.value})}
                               className="w-full px-2 py-1.5 bg-white border border-sand-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-sunset-400/40" />
                           </div>
                           <div>

@@ -24,6 +24,11 @@ def get_db():
     return app_state["db"]
 
 
+def get_settings():
+    from app.main import app_state
+    return app_state["settings"]
+
+
 @router.get("", response_model=DocumentListResponse)
 async def list_documents(
     page: int = Query(1, ge=1),
@@ -138,7 +143,7 @@ async def download_document(document_id: int, db=Depends(get_db)):
 
 
 @router.get("/email/{email_id}/download-all")
-async def download_all_documents(email_id: int, db=Depends(get_db), settings=Depends(get_db)):
+async def download_all_documents(email_id: int, db=Depends(get_db), settings=Depends(get_settings)):
     """Download all documents for an email as a zip using ingestion folder structure."""
     rows = db.execute(
         "SELECT * FROM documents WHERE email_id = ?",
@@ -147,7 +152,7 @@ async def download_all_documents(email_id: int, db=Depends(get_db), settings=Dep
     if not rows:
         raise HTTPException(404, "No documents found")
 
-    base = Path(settings.settings.storage.base_dir) if hasattr(settings, "settings") else Path(".")
+    base = Path(settings.storage.base_dir)
 
     added_hashes = set()
     mem_file = io.BytesIO()
@@ -174,7 +179,7 @@ async def download_all_documents(email_id: int, db=Depends(get_db), settings=Dep
 
 
 @router.get("/download-all")
-async def download_all_documents_bulk(db=Depends(get_db), settings=Depends(get_db)):
+async def download_all_documents_bulk(db=Depends(get_db), settings=Depends(get_settings)):
     """Download all documents across all emails as a structured zip (deduped by hash)."""
     rows = db.execute(
         """
@@ -186,7 +191,7 @@ async def download_all_documents_bulk(db=Depends(get_db), settings=Depends(get_d
     if not rows:
         raise HTTPException(404, "No documents found")
 
-    base = Path(settings.settings.storage.base_dir) if hasattr(settings, "settings") else Path(".")
+    base = Path(settings.storage.base_dir)
 
     added_hashes = set()
     mem_file = io.BytesIO()
