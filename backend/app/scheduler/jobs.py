@@ -71,6 +71,8 @@ class EmailScheduler:
             args=[account.id],
             name=f"Fetch {account.email}",
             replace_existing=True,
+            max_instances=1,
+            coalesce=True,
         )
 
         # Track in database
@@ -125,35 +127,36 @@ class EmailScheduler:
             from app.processing.pipeline import ProcessingPipeline
             from app.email_engine.parser import parse_email_message
 
-            fetcher = EmailFetcher(self.db)
             pipeline = ProcessingPipeline(self.db, self.settings)
+            fetcher = EmailFetcher(self.db, pipeline)
 
             # Fetch emails
             fetch_result = await fetcher.fetch_account(account)
 
-            # Process pending emails
-            pending = fetcher.get_pending_emails()
-            for email_row in pending:
-                if email_row["account_id"] == account_id:
-                    # We need the parsed email for processing
-                    # Re-parse from stored data
-                    from app.email_engine.parser import ParsedEmail, Attachment
-                    parsed = ParsedEmail(
-                        message_id=email_row["message_id"],
-                        subject=email_row["subject"],
-                        sender_email=email_row["sender_email"],
-                        sender_name=email_row["sender_name"],
-                        body_text=email_row.get("body_text", ""),
-                        body_html=email_row.get("body_html", ""),
-                    )
-                    if email_row.get("date_sent"):
-                        try:
-                            from datetime import datetime as dt
-                            parsed.date_sent = dt.fromisoformat(email_row["date_sent"])
-                        except Exception:
-                            pass
+            # Process pending emails only if fetcher had no inline pipeline
+            if not fetcher.pipeline:
+                pending = fetcher.get_pending_emails()
+                for email_row in pending:
+                    if email_row["account_id"] == account_id:
+                        # We need the parsed email for processing
+                        # Re-parse from stored data
+                        from app.email_engine.parser import ParsedEmail, Attachment
+                        parsed = ParsedEmail(
+                            message_id=email_row["message_id"],
+                            subject=email_row["subject"],
+                            sender_email=email_row["sender_email"],
+                            sender_name=email_row["sender_name"],
+                            body_text=email_row.get("body_text", ""),
+                            body_html=email_row.get("body_html", ""),
+                        )
+                        if email_row.get("date_sent"):
+                            try:
+                                from datetime import datetime as dt
+                                parsed.date_sent = dt.fromisoformat(email_row["date_sent"])
+                            except Exception:
+                                pass
 
-                    await pipeline.process_email(email_row["id"], parsed)
+                        await pipeline.process_email(email_row["id"], parsed)
 
             # Update job status
             self.db.execute(

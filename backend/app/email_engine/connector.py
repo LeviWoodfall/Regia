@@ -109,9 +109,18 @@ class IMAPConnector:
             raise RuntimeError("Not connected")
 
         typ, data = self._connection.search(None, criteria)
-        if typ != "OK":
+        if typ != "OK" or not data or not data[0]:
             return []
-        return data[0].split() if data[0] else []
+        return data[0].split()
+
+    def search_by_header(self, header: str, value: str) -> List[bytes]:
+        """Search messages by specific header value (e.g., Message-ID)."""
+        if not self._connection:
+            raise RuntimeError("Not connected")
+        typ, data = self._connection.search(None, "HEADER", header, value)
+        if typ != "OK" or not data or not data[0]:
+            return []
+        return data[0].split()
 
     def fetch_message(self, msg_id: bytes) -> Optional[bytes]:
         """Fetch a complete email message by ID."""

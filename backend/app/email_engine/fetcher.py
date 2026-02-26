@@ -14,6 +14,11 @@ from app.email_engine.connector import IMAPConnector
 from app.email_engine.parser import parse_email_message, ParsedEmail
 from app.security import credential_manager
 
+try:
+    from app.processing.pipeline import ProcessingPipeline
+except Exception:
+    ProcessingPipeline = None  # Optional to avoid circular import at module load
+
 logger = logging.getLogger("regia.email.fetcher")
 
 
@@ -23,8 +28,9 @@ class EmailFetcher:
     Supports configurable search, filtering, and post-processing actions.
     """
 
-    def __init__(self, db: Database):
+    def __init__(self, db: Database, pipeline: Optional["ProcessingPipeline"] = None):
         self.db = db
+        self.pipeline = pipeline
 
     async def fetch_account(self, account: EmailAccountConfig) -> Dict[str, Any]:
         """
@@ -150,9 +156,32 @@ class EmailFetcher:
         for msg_id in msg_ids:
             try:
                 raw_msg = connector.fetch_message(msg_id)
-                if not raw_msg:
+            except Exception as e:
+                # Handle TLS EOF or dropped connection by reconnecting once
+                if "EOF occurred in violation of protocol" in str(e):
+                    logger.warning(f"Connection dropped while fetching {msg_id}, retrying once...")
+                    try:
+                        connector.disconnect()
+                        reconnected = await connector.connect()
+                        if not reconnected:
+                            raise RuntimeError("Reconnect failed")
+                        connector.select_folder(folder, readonly=not needs_write)
+                        raw_msg = connector.fetch_message(msg_id)
+                    except Exception as retry_err:
+                        error_msg = f"Error processing message {msg_id}: {retry_err}"
+                        logger.error(error_msg)
+                        result["errors"].append(error_msg)
+                        continue
+                else:
+                    error_msg = f"Error processing message {msg_id}: {e}"
+                    logger.error(error_msg)
+                    result["errors"].append(error_msg)
                     continue
 
+            if not raw_msg:
+                continue
+
+            try:
                 parsed = parse_email_message(raw_msg)
 
                 # Skip if older than cutoff
@@ -178,6 +207,13 @@ class EmailFetcher:
                 # Store email in database
                 email_id = self._store_email(account.id, parsed)
                 result["processed"] += 1
+
+                # Process immediately (saves attachments) if pipeline is available
+                if self.pipeline:
+                    try:
+                        await self.pipeline.process_email(email_id, parsed)
+                    except Exception as e:
+                        logger.error(f"Pipeline processing failed for {parsed.message_id}: {e}")
 
                 # Apply post-processing action on the mail server
                 if needs_write:

@@ -80,6 +80,17 @@ export const updateConfig = (data: any) => api.put('/settings/config', data);
 // === Emails ===
 export const getEmails = (params?: any) => api.get('/emails', { params });
 export const getEmail = (id: number) => api.get(`/emails/${id}`);
+export const redownloadEmail = (id: number) => api.post(`/emails/${id}/redownload`);
+export const deleteEmail = (id: number, delete_remote: boolean = true) =>
+  api.delete(`/emails/${id}`, { params: { delete_remote } });
+export const refreshEmailFiles = (id: number) => api.post(`/emails/${id}/refresh`);
+export const refreshAllAttachments = () => api.post('/emails/refresh-all-attachments');
+export const downloadAllEmailDocs = (emailId: number) =>
+  api.get(`/documents/email/${emailId}/download-all`, { responseType: 'blob' });
+export const downloadAllAttachments = () =>
+  api.get('/documents/download-all', { responseType: 'blob' });
+export const captureLink = (emailId: number, url: string, filename?: string) =>
+  api.post(`/emails/${emailId}/capture-link`, null, { params: { url, filename } });
 export const triggerFetch = (accountId: string) => api.post(`/emails/fetch/${accountId}`);
 export const triggerFetchAll = () => api.post('/emails/fetch-all');
 export const getEmailStats = () => api.get('/emails/stats/summary');

@@ -127,16 +127,23 @@ export default function Documents() {
             </div>
 
             {/* Preview Image */}
-            <div className="h-48 bg-sand-100 rounded-xl mb-4 flex items-center justify-center overflow-hidden">
+            <div className="h-64 bg-sand-100 rounded-xl mb-4 flex items-center justify-center overflow-hidden relative">
               <img
                 src={getDocumentPreviewUrl(preview.id)}
                 alt="Preview"
                 className="max-h-full max-w-full object-contain"
                 onError={(e) => {
                   (e.target as HTMLImageElement).style.display = 'none';
+                  const fallback = e.currentTarget.parentElement?.querySelector('.preview-fallback');
+                  if (fallback) (fallback as HTMLElement).style.display = 'flex';
                 }}
               />
-              <FileText className="w-16 h-16 text-sand-300" />
+              <div className="preview-fallback hidden absolute inset-0 items-center justify-center">
+                <div className="text-center text-sand-500 text-xs">
+                  <FileText className="w-10 h-10 mx-auto mb-2 text-sand-300" />
+                  <p>Preview not available</p>
+                </div>
+              </div>
             </div>
 
             <p className="text-sm font-medium text-warm-900 break-words">{preview.original_filename}</p>

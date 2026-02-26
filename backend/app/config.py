@@ -61,6 +61,7 @@ class EmailAccountConfig(BaseModel):
     only_with_attachments: bool = False  # Only ingest emails that have attachments
     max_emails_per_fetch: int = 50  # Limit per fetch cycle (0 = unlimited)
     skip_older_than_days: int = 0  # Skip emails older than N days (0 = no limit)
+    start_ingest_date: Optional[str] = None  # ISO date string YYYY-MM-DD
     # Post-processing actions (applied on the mail server after ingestion)
     post_action: str = "none"  # none, mark_read, move, delete, archive
     post_action_folder: str = ""  # Folder to move to (for post_action=move)

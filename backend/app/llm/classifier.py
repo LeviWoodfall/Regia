@@ -53,9 +53,16 @@ class DocumentClassifier:
         self._llm_available: Optional[bool] = None
 
     async def _check_llm(self) -> bool:
-        """Check if LLM is available (cached)."""
-        if self._llm_available is None:
+        if self._llm_available is not None:
+            return self._llm_available
+        try:
             self._llm_available = await self.client.is_available()
+        except Exception as e:
+            logger.warning(f"LLM unavailable, skipping classification: {e}")
+            self._llm_available = False
+        except BaseException as e:  # includes CancelledError
+            logger.warning(f"LLM check interrupted: {e}")
+            self._llm_available = False
         return self._llm_available
 
     async def classify_document(

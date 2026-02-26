@@ -3,9 +3,12 @@ Document management routes for Regia.
 """
 
 import os
+import re
+import io
+import zipfile
 from pathlib import Path
 from fastapi import APIRouter, HTTPException, Depends, Query
-from fastapi.responses import FileResponse, Response
+from fastapi.responses import FileResponse, Response, StreamingResponse
 from typing import Optional
 
 from app.models import DocumentResponse, DocumentListResponse
@@ -134,6 +137,81 @@ async def download_document(document_id: int, db=Depends(get_db)):
     )
 
 
+@router.get("/email/{email_id}/download-all")
+async def download_all_documents(email_id: int, db=Depends(get_db), settings=Depends(get_db)):
+    """Download all documents for an email as a zip using ingestion folder structure."""
+    rows = db.execute(
+        "SELECT * FROM documents WHERE email_id = ?",
+        (email_id,),
+    )
+    if not rows:
+        raise HTTPException(404, "No documents found")
+
+    base = Path(settings.settings.storage.base_dir) if hasattr(settings, "settings") else Path(".")
+
+    added_hashes = set()
+    mem_file = io.BytesIO()
+    with zipfile.ZipFile(mem_file, mode="w", compression=zipfile.ZIP_DEFLATED) as zf:
+        for doc in rows:
+            sha = doc.get("sha256_hash") or ""
+            if sha in added_hashes:
+                continue
+            added_hashes.add(sha)
+
+            path = Path(doc["stored_path"])
+            if not path.exists():
+                continue
+
+            arcname = path.relative_to(base) if path.is_absolute() and base in path.parents else Path(doc["original_filename"] or path.name)
+            try:
+                zf.write(path, arcname=str(arcname))
+            except Exception:
+                continue
+
+    mem_file.seek(0)
+    headers = {"Content-Disposition": f"attachment; filename=email_{email_id}_attachments.zip"}
+    return Response(content=mem_file.read(), media_type="application/zip", headers=headers)
+
+
+@router.get("/download-all")
+async def download_all_documents_bulk(db=Depends(get_db), settings=Depends(get_db)):
+    """Download all documents across all emails as a structured zip (deduped by hash)."""
+    rows = db.execute(
+        """
+        SELECT d.*, e.subject as email_subject, e.id as email_id
+        FROM documents d LEFT JOIN emails e ON d.email_id = e.id
+        ORDER BY e.date_ingested DESC
+        """
+    )
+    if not rows:
+        raise HTTPException(404, "No documents found")
+
+    base = Path(settings.settings.storage.base_dir) if hasattr(settings, "settings") else Path(".")
+
+    added_hashes = set()
+    mem_file = io.BytesIO()
+    with zipfile.ZipFile(mem_file, mode="w", compression=zipfile.ZIP_DEFLATED) as zf:
+        for doc in rows:
+            sha = doc.get("sha256_hash") or ""
+            if sha in added_hashes:
+                continue
+            added_hashes.add(sha)
+
+            path = Path(doc["stored_path"])
+            if not path.exists():
+                continue
+
+            arcname = path.relative_to(base) if path.is_absolute() and base in path.parents else Path(doc["original_filename"] or path.name)
+            try:
+                zf.write(path, arcname=str(arcname))
+            except Exception:
+                continue
+
+    mem_file.seek(0)
+    headers = {"Content-Disposition": "attachment; filename=regia_all_attachments.zip"}
+    return Response(content=mem_file.read(), media_type="application/zip", headers=headers)
+
+
 @router.get("/{document_id}/preview")
 async def preview_document(
     document_id: int,
@@ -162,7 +240,7 @@ async def preview_document(
     if not png_bytes:
         raise HTTPException(404, "Could not render preview")
 
-    return Response(content=png_bytes, media_type="image/png")
+    return StreamingResponse(io.BytesIO(png_bytes), media_type="image/png")
 
 
 @router.get("/{document_id}/verify")

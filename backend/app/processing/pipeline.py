@@ -6,6 +6,7 @@ Orchestrates: attachment extraction → storage → hashing → OCR → LLM clas
 import os
 import re
 import logging
+import hashlib
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, Any, List, Optional
@@ -163,52 +164,97 @@ class ProcessingPipeline:
         self, email_id: int, parsed: ParsedEmail, attachment: Attachment
     ) -> Optional[int]:
         """Process and store a single attachment."""
-        # Build storage path
-        stored_path = self._build_storage_path(parsed, attachment.filename)
-        stored_path.parent.mkdir(parents=True, exist_ok=True)
+        # Compute hash first to support deduplication
+        content_hash = hashlib.sha256(attachment.content).hexdigest()
 
-        # Write file
-        stored_path.write_bytes(attachment.content)
+        # Deduplicate by SHA to avoid duplicate files on disk
+        existing = self.db.execute(
+            "SELECT * FROM documents WHERE sha256_hash = ? LIMIT 1", (content_hash,)
+        )
 
-        # Compute hash
-        file_hash = hash_file(str(stored_path))
-
-        # Detect file type and extract text accordingly
-        file_type = detect_file_type(attachment.filename, attachment.content_type)
+        stored_path: Path
+        stored_filename: str
+        file_size = attachment.size
+        mime_type = attachment.content_type
         page_count = 0
         ocr_text = ""
+        file_type = "unknown"
+        summary = ""
+        classification = ""
+        category = ""
+        ocr_completed = 0
 
         try:
-            if file_type == "pdf":
-                page_count = get_pdf_page_count(str(stored_path))
-                ocr_text = extract_pdf_text(str(stored_path))
-                if not ocr_text.strip() and self.settings.ocr.enabled:
-                    ocr_text = ocr_pdf(str(stored_path), self.settings.ocr)
+            if existing:
+                # Reuse existing stored file and metadata, do not create duplicate on disk
+                ex = existing[0]
+                stored_path = Path(ex["stored_path"])
+                stored_filename = ex["stored_filename"]
+                file_size = ex.get("file_size", file_size)
+                mime_type = ex.get("mime_type", mime_type)
+                page_count = ex.get("page_count", 0)
+                ocr_text = ex.get("ocr_text", "") or ""
+                summary = ex.get("llm_summary", "") or ""
+                classification = ex.get("classification", "") or ""
+                category = ex.get("category", "") or ""
+                ocr_completed = ex.get("ocr_completed", 0) or 0
+                file_type = detect_file_type(stored_filename or attachment.filename, mime_type)
+            else:
+                # Build storage path
+                stored_path = self._build_storage_path(parsed, attachment.filename)
+                stored_path.parent.mkdir(parents=True, exist_ok=True)
 
-            elif file_type == "docx":
-                ocr_text = extract_docx_text(str(stored_path))
-                page_count = get_docx_page_count(str(stored_path))
+                # Write file
+                if not attachment.content:
+                    logger.warning(
+                        f"Skipping empty attachment for email {email_id}: {attachment.filename}"
+                    )
+                    return None
+                stored_path.write_bytes(attachment.content)
+                stored_filename = stored_path.name
 
-            elif file_type == "xlsx":
-                ocr_text = extract_xlsx_text(str(stored_path))
-                page_count = get_xlsx_sheet_count(str(stored_path))
+                # Detect file type and process accordingly
+                file_type = detect_file_type(stored_filename, mime_type)
 
-            elif file_type == "image":
-                if self.settings.ocr.enabled:
-                    ocr_text = extract_image_text(str(stored_path), self.settings.ocr)
-                meta = get_image_metadata(str(stored_path))
-                page_count = 1
-                if meta:
-                    dims = f"{meta.get('width', '?')}x{meta.get('height', '?')}"
-                    ocr_text = f"[Image: {dims} {meta.get('format', '')}]\n{ocr_text}"
-
+                if file_type == "pdf":
+                    try:
+                        page_count = get_pdf_page_count(str(stored_path))
+                        ocr_text = extract_pdf_text(str(stored_path))
+                        if not ocr_text.strip() and self.settings.ocr.enabled:
+                            ocr_text = ocr_pdf(str(stored_path), self.settings.ocr)
+                        ocr_completed = 1 if ocr_text else 0
+                    except Exception as e:
+                        logger.warning(f"PDF processing error for {attachment.filename}: {e}")
+                elif file_type == "docx":
+                    try:
+                        ocr_text = extract_docx_text(str(stored_path))
+                        page_count = get_docx_page_count(str(stored_path))
+                        ocr_completed = 1 if ocr_text else 0
+                    except Exception as e:
+                        logger.warning(f"DOCX processing error for {attachment.filename}: {e}")
+                elif file_type == "xlsx":
+                    try:
+                        ocr_text = extract_xlsx_text(str(stored_path))
+                        page_count = get_xlsx_sheet_count(str(stored_path))
+                        ocr_completed = 1 if ocr_text else 0
+                    except Exception as e:
+                        logger.warning(f"XLSX processing error for {attachment.filename}: {e}")
+                elif file_type == "image":
+                    try:
+                        if self.settings.ocr.enabled:
+                            ocr_text = extract_image_text(str(stored_path), self.settings.ocr)
+                        meta = get_image_metadata(str(stored_path))
+                        page_count = 1
+                        if meta:
+                            dims = f"{meta.get('width', '?')}x{meta.get('height', '?')}"
+                            ocr_text = f"[Image: {dims} {meta.get('format', '')}]\n{ocr_text}"
+                        ocr_completed = 1 if ocr_text else 0
+                    except Exception as e:
+                        logger.warning(f"Image processing error for {attachment.filename}: {e}")
         except Exception as e:
             logger.warning(f"Processing error for {attachment.filename} ({file_type}): {e}")
 
         # Classify document
-        classification = ""
-        category = ""
-        summary = ""
         try:
             classifier = self._get_classifier()
             text_for_classification = ocr_text[:2000] if ocr_text else attachment.filename
@@ -226,6 +272,17 @@ class ProcessingPipeline:
         except Exception as e:
             logger.warning(f"LLM classification failed: {e}")
 
+        # Hash to store (content hash)
+        file_hash = content_hash
+
+        # Avoid duplicate document rows for same email + hash
+        existing_doc = self.db.execute(
+            "SELECT id FROM documents WHERE email_id = ? AND sha256_hash = ? LIMIT 1",
+            (email_id, file_hash),
+        )
+        if existing_doc:
+            return existing_doc[0]["id"]
+
         # Store in database
         doc_id = self.db.execute_insert(
             """INSERT INTO documents
@@ -236,17 +293,17 @@ class ProcessingPipeline:
             (
                 email_id,
                 attachment.filename,
-                stored_path.name,
+                stored_filename or attachment.filename,
                 str(stored_path),
-                attachment.size,
-                attachment.content_type,
+                file_size,
+                mime_type,
                 file_hash,
                 1,  # hash verified on write
                 "attachment",
                 classification,
                 category,
                 ocr_text,
-                1 if ocr_text else 0,
+                ocr_completed,
                 summary,
                 page_count,
             ),

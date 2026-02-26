@@ -10,7 +10,7 @@ import {
   getCloudProviders, getCloudConnections, createCloudConnection, deleteCloudConnection,
   startOAuth2Flow, getEmailProviders,
   getRules, createRule, updateRule, deleteRule, getRuleFields,
-  getCloudMode,
+  getCloudMode, refreshAllAttachments,
 } from '../lib/api';
 
 export default function SettingsPage() {
@@ -23,6 +23,7 @@ export default function SettingsPage() {
   const [tab, setTab] = useState('security');
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState('');
+  const [refreshingAll, setRefreshingAll] = useState(false);
 
   // New account form
   const [newAccount, setNewAccount] = useState({
@@ -387,6 +388,29 @@ export default function SettingsPage() {
                 Lock Credential Store
               </button>
             )}
+
+            {/* Refresh all attachments */}
+            <div className="pt-2">
+              <p className="text-sm text-warm-900 font-semibold mb-2">Attachment Refresh</p>
+              <p className="text-xs text-sand-500 mb-2">Ensure all attachments are written to disk in the original ingestion paths.</p>
+              <button
+                onClick={async () => {
+                  setRefreshingAll(true);
+                  setMessage('Refreshing all attachments...');
+                  try {
+                    await refreshAllAttachments();
+                    setMessage('Refreshed all attachments (dedupbed)');
+                  } catch {
+                    setMessage('Failed to refresh attachments');
+                  }
+                  setRefreshingAll(false);
+                }}
+                disabled={refreshingAll}
+                className="px-4 py-2 rounded-lg text-xs font-medium bg-sand-100 text-sand-700 hover:bg-sand-200 disabled:opacity-50"
+              >
+                {refreshingAll ? 'Refreshing...' : 'Refresh all attachments'}
+              </button>
+            </div>
           </div>
         )}
 
