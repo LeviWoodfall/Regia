@@ -317,6 +317,25 @@ CREATE TABLE IF NOT EXISTS cloud_sync_log (
     error_message TEXT DEFAULT '',
     UNIQUE(connection_id, document_id)
 );
+
+-- Review queue: emails that require manual approval before processing
+CREATE TABLE IF NOT EXISTS review_queue (
+    email_id INTEGER PRIMARY KEY REFERENCES emails(id),
+    status TEXT NOT NULL DEFAULT 'pending', -- pending, approved, rejected
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    reviewed_at TEXT,
+    decision_by TEXT DEFAULT '',
+    notes TEXT DEFAULT ''
+);
+
+-- Review events: log approvals/rejections for training signals
+CREATE TABLE IF NOT EXISTS review_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    email_id INTEGER REFERENCES emails(id),
+    event_type TEXT NOT NULL, -- approve, reject
+    payload TEXT DEFAULT '',
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
 """
 
 

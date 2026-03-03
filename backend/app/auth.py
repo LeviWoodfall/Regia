@@ -176,6 +176,21 @@ class AuthManager:
         logger.info(f"Password changed for '{username}'")
         return True
 
+    def set_password(self, username: str, new_password: str) -> bool:
+        """Force-set a user's password (used for dev/test seeding)."""
+        rows = self.db.execute("SELECT * FROM users WHERE username = ?", (username,))
+        if not rows:
+            return False
+
+        new_hash = _hash_password(new_password)
+        self.db.execute(
+            "UPDATE users SET password_hash = ? WHERE username = ?",
+            (new_hash, username),
+        )
+        self.db.execute("DELETE FROM sessions WHERE user_id = ?", (rows[0]["id"],))
+        logger.info(f"Password reset for '{username}'")
+        return True
+
     # === Password Reset ===
 
     def request_password_reset(self, email: str) -> Optional[str]:

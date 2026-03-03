@@ -1,8 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Shield, Lock, Unlock, Mail, Plus, Trash2, Save, Eye, EyeOff,
   Brain, Clock, FolderOpen, Cloud, ExternalLink, Link2, KeyRound,
-  ListFilter, Globe, Wifi, ChevronDown, ChevronUp, ToggleLeft, ToggleRight,
+  ListFilter, Globe, Wifi, ChevronDown, ChevronUp, ToggleLeft, ToggleRight, Palette,
 } from 'lucide-react';
 import {
   getStatus, setupMasterPassword, unlock as apiUnlock, lock as apiLock,
@@ -11,7 +11,11 @@ import {
   startOAuth2Flow, getEmailProviders,
   getRules, createRule, updateRule, deleteRule, getRuleFields,
   getCloudMode, refreshAllAttachments, refreshAllStatus,
+  schedulerStart, schedulerStop, schedulerStatus,
 } from '../lib/api';
+import { useTheme } from '../lib/theme';
+import type { ThemeName } from '../lib/theme';
+import { formatDateTime } from '../lib/utils';
 
 export default function SettingsPage() {
   const [initialized, setInitialized] = useState(false);
@@ -24,6 +28,11 @@ export default function SettingsPage() {
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState('');
   const [refreshingAll, setRefreshingAll] = useState(false);
+  const [schedulerInfo, setSchedulerInfo] = useState<{ running: boolean; jobs: any[] }>({ running: false, jobs: [] });
+  const [schedulerLoading, setSchedulerLoading] = useState(false);
+  const [schedulerActionLoading, setSchedulerActionLoading] = useState(false);
+  const { theme: activeTheme, setTheme: setThemeName, themes, metadata } = useTheme();
+  const themeCards = useMemo(() => themes.map((name: ThemeName) => ({ name, meta: metadata[name] })), [themes, metadata]);
 
   // New account form
   const [newAccount, setNewAccount] = useState({
@@ -110,6 +119,20 @@ export default function SettingsPage() {
     } catch { /* ignore */ }
   };
 
+  const loadSchedulerStatusData = useCallback(async () => {
+    setSchedulerLoading(true);
+    try {
+      const resp = await schedulerStatus();
+      setSchedulerInfo({
+        running: resp.data.running,
+        jobs: resp.data.jobs || [],
+      });
+    } catch {
+      setSchedulerInfo({ running: false, jobs: [] });
+    }
+    setSchedulerLoading(false);
+  }, []);
+
   useEffect(() => {
     loadStatus();
     loadAccounts();
@@ -117,7 +140,44 @@ export default function SettingsPage() {
     loadCloudData();
     loadRules();
     loadCloudMode();
-  }, []);
+    loadSchedulerStatusData();
+  }, [loadSchedulerStatusData]);
+
+  useEffect(() => {
+    if (tab === 'scheduler') {
+      loadSchedulerStatusData();
+    }
+  }, [tab, loadSchedulerStatusData]);
+
+  const handleSchedulerStart = async () => {
+    setSchedulerActionLoading(true);
+    setMessage('');
+    try {
+      await schedulerStart();
+      setMessage('Scheduler started');
+      await loadSchedulerStatusData();
+    } catch {
+      setMessage('Failed to start scheduler');
+    }
+    setSchedulerActionLoading(false);
+  };
+
+  const handleSchedulerStop = async () => {
+    setSchedulerActionLoading(true);
+    setMessage('');
+    try {
+      await schedulerStop();
+      setMessage('Scheduler stopped');
+      await loadSchedulerStatusData();
+    } catch {
+      setMessage('Failed to stop scheduler');
+    }
+    setSchedulerActionLoading(false);
+  };
+
+  const handleSchedulerRefresh = () => {
+    loadSchedulerStatusData();
+  };
 
   const handleConnectCloud = async (provider: string) => {
     try {
@@ -281,6 +341,7 @@ export default function SettingsPage() {
 
   const tabs = [
     { id: 'security', label: 'Security', icon: Shield },
+    { id: 'appearance', label: 'Appearance', icon: Palette },
     { id: 'accounts', label: 'Email Accounts', icon: Mail },
     { id: 'rules', label: 'Email Rules', icon: ListFilter },
     { id: 'oauth', label: 'OAuth Providers', icon: KeyRound },
@@ -432,6 +493,68 @@ export default function SettingsPage() {
               >
                 {refreshingAll ? 'Refreshing...' : 'Refresh all attachments'}
               </button>
+            </div>
+          </div>
+        )}
+
+        {/* === Appearance Tab === */}
+        {tab === 'appearance' && (
+          <div className="space-y-6">
+            <div className="flex items-center justify-between flex-wrap gap-3">
+              <div>
+                <h3 className="text-lg font-semibold text-warm-900 flex items-center gap-2">
+                  <Palette className="w-5 h-5 text-sunset-500" /> Theme & Appearance
+                </h3>
+                <p className="text-sm text-sand-500">Personalize Regia with curated color palettes.</p>
+              </div>
+              <div className="flex items-center gap-2 text-xs text-sand-500">
+                <span className="px-3 py-1 rounded-full bg-sand-100 text-warm-700">
+                  Active theme: <span className="font-semibold text-warm-900">{metadata[activeTheme].label}</span>
+                </span>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {themeCards.map(({ name, meta }) => {
+                const isActive = name === activeTheme;
+                return (
+                  <button
+                    key={name}
+                    onClick={() => setThemeName(name)}
+                    className={`text-left rounded-2xl border-2 p-4 transition-all hover:-translate-y-0.5 ${
+                      isActive
+                        ? 'border-sunset-500 shadow-[0_8px_20px_rgba(236,117,32,0.18)] bg-sand-50'
+                        : 'border-sand-200 hover:border-sunset-300 bg-white'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-2 mb-3">
+                      <div>
+                        <p className="text-sm font-semibold text-warm-900">{meta.label}</p>
+                        <p className="text-xs text-sand-500">{meta.description}</p>
+                      </div>
+                      {isActive && (
+                        <span className="text-[10px] font-semibold uppercase tracking-wide text-sunset-600">Active</span>
+                      )}
+                    </div>
+                    <div className="flex gap-1.5">
+                      {meta.swatches.map((swatch, i) => (
+                        <span
+                          key={i}
+                          className="h-8 flex-1 rounded-full"
+                          style={{ background: swatch }}
+                        />
+                      ))}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="rounded-2xl border border-sand-200 bg-sand-50 p-4">
+              <p className="text-xs text-sand-500">
+                Theme preferences sync across devices via UI settings. Each palette comes with tuned gradients, borders,
+                and typography accents so dashboards, tables, and Reggie feel cohesive.
+              </p>
             </div>
           </div>
         )}
@@ -1341,11 +1464,96 @@ export default function SettingsPage() {
 
         {/* === Scheduler Tab === */}
         {tab === 'scheduler' && config && (
-          <div className="space-y-4 max-w-lg">
-            <h3 className="text-lg font-semibold text-warm-900 flex items-center gap-2">
-              <Clock className="w-5 h-5 text-sunset-500" /> Scheduler Configuration
-            </h3>
-            <div className="space-y-3">
+          <div className="space-y-6">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h3 className="text-lg font-semibold text-warm-900 flex items-center gap-2">
+                  <Clock className="w-5 h-5 text-sunset-500" /> Email Poller Control
+                </h3>
+                <div className="flex items-center gap-2 mt-1">
+                  <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-medium ${
+                    schedulerInfo.running ? 'bg-green-100 text-green-700' : 'bg-sand-200 text-sand-600'
+                  }`}>
+                    {schedulerInfo.running ? 'Running' : 'Stopped'}
+                  </span>
+                  {schedulerLoading && (
+                    <span className="text-[11px] text-sand-500">Refreshing status…</span>
+                  )}
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  onClick={handleSchedulerRefresh}
+                  className="px-3 py-2 rounded-xl text-xs font-medium border border-sand-200 text-sand-600 hover:bg-sand-100"
+                  disabled={schedulerLoading}
+                >
+                  Refresh Status
+                </button>
+                <button
+                  onClick={handleSchedulerStart}
+                  className="px-4 py-2 rounded-xl text-xs font-semibold bg-green-500 text-white hover:bg-green-600 disabled:opacity-60"
+                  disabled={schedulerInfo.running || schedulerActionLoading}
+                >
+                  Start Poller
+                </button>
+                <button
+                  onClick={handleSchedulerStop}
+                  className="px-4 py-2 rounded-xl text-xs font-semibold bg-red-500 text-white hover:bg-red-600 disabled:opacity-60"
+                  disabled={!schedulerInfo.running || schedulerActionLoading}
+                >
+                  Stop Poller
+                </button>
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-sand-200 bg-white p-4">
+              <p className="text-xs font-medium text-sand-600 mb-3">Job Status</p>
+              {schedulerLoading ? (
+                <div className="flex items-center gap-2 text-sand-500 text-sm">
+                  <span className="animate-spin h-4 w-4 rounded-full border-2 border-sunset-300 border-t-transparent" />
+                  Loading scheduler jobs…
+                </div>
+              ) : schedulerInfo.jobs.length === 0 ? (
+                <p className="text-sm text-sand-500">No scheduler jobs registered yet.</p>
+              ) : (
+                <div className="space-y-2">
+                  {schedulerInfo.jobs.map((job: any) => (
+                    <div key={job.id} className="flex items-center justify-between gap-3 px-3 py-3 rounded-xl bg-sand-50">
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold text-warm-900 truncate">{job.name || job.id}</p>
+                        <p className="text-xs text-sand-500">
+                          Account: {job.account_id || '—'} · Runs: {job.run_count ?? 0}
+                        </p>
+                      </div>
+                      <div className="text-right space-y-1">
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium ${
+                          job.status === 'running'
+                            ? 'bg-blue-100 text-blue-700'
+                            : job.status === 'failed'
+                              ? 'bg-red-100 text-red-600'
+                              : job.status === 'completed'
+                                ? 'bg-green-100 text-green-700'
+                                : 'bg-sand-200 text-sand-600'
+                        }`}>
+                          {job.status || 'idle'}
+                        </span>
+                        <p className="text-[11px] text-sand-400">
+                          Last run: {job.last_run_at ? formatDateTime(job.last_run_at) : '—'}
+                        </p>
+                        {job.last_error && (
+                          <p className="text-[11px] text-red-500 max-w-xs truncate" title={job.last_error}>
+                            {job.last_error}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="space-y-3 max-w-lg">
+              <p className="text-sm font-semibold text-warm-900">Scheduler Defaults</p>
               <div className="flex items-center gap-2">
                 <input
                   type="checkbox"
@@ -1373,11 +1581,11 @@ export default function SettingsPage() {
                 />
                 <label className="text-sm text-warm-700">Retry on failure</label>
               </div>
+              <button onClick={handleSaveConfig}
+                className="flex items-center gap-2 px-4 py-2 bg-sunset-500 text-white rounded-xl text-sm font-medium hover:bg-sunset-600 transition-colors">
+                <Save className="w-4 h-4" /> Save Configuration
+              </button>
             </div>
-            <button onClick={handleSaveConfig}
-              className="flex items-center gap-2 px-4 py-2 bg-sunset-500 text-white rounded-xl text-sm font-medium hover:bg-sunset-600 transition-colors">
-              <Save className="w-4 h-4" /> Save Configuration
-            </button>
           </div>
         )}
       </div>

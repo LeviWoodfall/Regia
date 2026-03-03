@@ -209,12 +209,23 @@ class EmailFetcher:
 
                 result["new"] += 1
 
+                has_links = bool(parsed.invoice_links)
+                has_atts = bool(parsed.attachments)
+                needs_review = has_links and not has_atts
+
                 # Store email in database
-                email_id = self._store_email(account.id, parsed)
+                status = "pending_review" if needs_review else "pending"
+                email_id = self._store_email(account.id, parsed, status=status)
                 result["processed"] += 1
 
-                # Process immediately (saves attachments) if pipeline is available
-                if self.pipeline:
+                # Queue for review if needed
+                if needs_review:
+                    self.db.execute_insert(
+                        "INSERT OR REPLACE INTO review_queue (email_id, status) VALUES (?, 'pending')",
+                        (email_id,),
+                    )
+                # Process immediately (saves attachments) if pipeline is available and no review needed
+                elif self.pipeline:
                     try:
                         await self.pipeline.process_email(email_id, parsed)
                     except Exception as e:
@@ -257,7 +268,7 @@ class EmailFetcher:
         elif action == "archive":
             connector.archive_message(msg_id)
 
-    def _store_email(self, account_id: str, parsed: ParsedEmail) -> int:
+    def _store_email(self, account_id: str, parsed: ParsedEmail, status: str = "pending") -> int:
         """Store a parsed email in the database."""
         email_id = self.db.execute_insert(
             """INSERT INTO emails
@@ -277,7 +288,7 @@ class EmailFetcher:
                 parsed.body_html,
                 1 if parsed.attachments else 0,
                 1 if parsed.invoice_links else 0,
-                "pending",
+                status,
             ),
         )
         return email_id

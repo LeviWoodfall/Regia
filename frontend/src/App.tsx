@@ -12,6 +12,7 @@ import SearchPage from './pages/SearchPage';
 import ReggiePage from './pages/ReggiePage';
 import LogsPage from './pages/LogsPage';
 import SettingsPage from './pages/SettingsPage';
+import ReviewQueuePage from './pages/ReviewQueuePage';
 
 function AuthGuard({ children }: { children: React.ReactNode }) {
   const { authenticated, loading } = useAuth();
@@ -45,6 +46,7 @@ function AppLayout() {
             <Routes>
               <Route path="/" element={<Dashboard />} />
               <Route path="/emails" element={<Emails />} />
+              <Route path="/review-queue" element={<ReviewQueuePage />} />
               <Route path="/documents" element={<Documents />} />
               <Route path="/files" element={<FileBrowser />} />
               <Route path="/search" element={<SearchPage />} />

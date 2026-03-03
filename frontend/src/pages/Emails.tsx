@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
 import {
-  Mail, Paperclip, Link2, ChevronLeft, ChevronRight, Loader2, Eye, RotateCw, Trash2,
+  Mail, Paperclip, Link2, ChevronLeft, ChevronRight, Loader2, Eye, RotateCw, Trash2, Archive,
 } from 'lucide-react';
-import { getEmails, getEmail, redownloadEmail, deleteEmail, refreshEmailFiles, downloadAllEmailDocs, downloadAllAttachments, captureLink, getDocumentPreviewUrl } from '../lib/api';
+import { getEmails, getEmail, redownloadEmail, deleteEmail, refreshEmailFiles, downloadAllEmailDocs, downloadAllAttachments, captureLink, getDocumentPreviewUrl, archiveEmail } from '../lib/api';
 import { formatDateTime, truncate } from '../lib/utils';
 
 export default function Emails() {
@@ -120,6 +120,22 @@ export default function Emails() {
       load();
     } catch {
       setActionMessage('Delete failed');
+    }
+    setActionLoading(false);
+  };
+
+  const handleArchive = async () => {
+    if (!selectedId) return;
+    setActionLoading(true);
+    setActionMessage('');
+    try {
+      await archiveEmail(selectedId);
+      setActionMessage('Email archived remotely');
+      setSelectedEmail(null);
+      setSelectedId(null);
+      load();
+    } catch {
+      setActionMessage('Archive failed');
     }
     setActionLoading(false);
   };
@@ -297,6 +313,13 @@ export default function Emails() {
                     className="px-3 py-1.5 rounded-lg text-xs font-medium bg-sand-100 text-sand-700 hover:bg-sand-200 disabled:opacity-50"
                   >
                     Preview link
+                  </button>
+                  <button
+                    onClick={handleArchive}
+                    disabled={actionLoading}
+                    className="px-3 py-1.5 rounded-lg text-xs font-medium bg-sand-100 text-sand-700 hover:bg-sand-200 disabled:opacity-50"
+                  >
+                    <Archive className="w-3.5 h-3.5 inline mr-1" /> Archive
                   </button>
                   <button
                     onClick={() => handleDelete(true)}

@@ -95,6 +95,15 @@ export const captureLink = (emailId: number, url: string, filename?: string) =>
 export const triggerFetch = (accountId: string) => api.post(`/emails/fetch/${accountId}`);
 export const triggerFetchAll = () => api.post('/emails/fetch-all');
 export const getEmailStats = () => api.get('/emails/stats/summary');
+export const getReviewQueue = (params?: any) => api.get('/emails/review-queue', { params });
+export const approveEmail = (id: number) => api.post(`/emails/${id}/approve`);
+export const rejectEmail = (id: number) => api.post(`/emails/${id}/reject`);
+export const archiveEmail = (id: number) => api.post(`/emails/${id}/archive`);
+
+// === Scheduler Control ===
+export const schedulerStart = () => api.post('/scheduler/start');
+export const schedulerStop = () => api.post('/scheduler/stop');
+export const schedulerStatus = () => api.get('/scheduler/status');
 
 // === Documents ===
 export const getDocuments = (params?: any) => api.get('/documents', { params });

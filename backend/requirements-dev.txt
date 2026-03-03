@@ -1,0 +1,6 @@
+# Regia backend dev/test dependencies
+pytest==8.3.3
+pytest-asyncio==0.24.0
+httpx==0.28.1
+bandit==1.7.9
+safety==2.3.5

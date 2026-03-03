@@ -1,7 +1,7 @@
 import { NavLink } from 'react-router-dom';
 import {
   LayoutDashboard, Mail, FileText, Search, FolderOpen,
-  MessageCircle, Settings, Sun, Moon, Activity, LogOut, User,
+  MessageCircle, Settings, Sun, Activity, LogOut, User, ListChecks, Palette,
 } from 'lucide-react';
 import { useTheme } from '../lib/theme';
 import { useAuth } from '../lib/auth';
@@ -9,6 +9,7 @@ import { useAuth } from '../lib/auth';
 const navItems = [
   { to: '/', icon: LayoutDashboard, label: 'Dashboard' },
   { to: '/emails', icon: Mail, label: 'Emails' },
+  { to: '/review-queue', icon: ListChecks, label: 'Review Queue' },
   { to: '/documents', icon: FileText, label: 'Documents' },
   { to: '/files', icon: FolderOpen, label: 'Files' },
   { to: '/search', icon: Search, label: 'Search' },
@@ -18,8 +19,14 @@ const navItems = [
 ];
 
 export default function Sidebar() {
-  const { theme, toggleTheme } = useTheme();
+  const { theme, setTheme, themes, metadata } = useTheme();
   const { user, logout } = useAuth();
+
+  const cycleTheme = () => {
+    const idx = themes.indexOf(theme);
+    const next = themes[(idx + 1) % themes.length];
+    setTheme(next);
+  };
 
   return (
     <aside className="fixed left-0 top-0 bottom-0 w-64 bg-warm-900 text-warm-100 flex flex-col z-30">
@@ -59,16 +66,12 @@ export default function Sidebar() {
       <div className="px-3 py-3 border-t border-warm-800 space-y-2">
         {/* Theme Toggle */}
         <button
-          onClick={toggleTheme}
+          onClick={cycleTheme}
           className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium
                      text-warm-300 hover:bg-warm-800 hover:text-warm-100 transition-all duration-150"
         >
-          {theme === 'dark' ? (
-            <Sun className="w-[18px] h-[18px] shrink-0" />
-          ) : (
-            <Moon className="w-[18px] h-[18px] shrink-0" />
-          )}
-          {theme === 'dark' ? 'Light Mode' : 'Dark Mode'}
+          <Palette className="w-[18px] h-[18px] shrink-0" />
+          Theme: {metadata[theme].label}
         </button>
 
         {/* User Info + Logout */}

@@ -121,6 +121,23 @@ npm run dev
 ```
 Opens at **http://localhost:5173** with hot reload (proxies API to the backend).
 
+### Tests & Security Checks
+
+Regia now ships with backend pytest coverage plus automated security scanning hooks. To run them from the `backend/` directory:
+
+```bash
+pip install -r requirements.txt
+pip install -r requirements-dev.txt
+
+# Run backend tests
+pytest
+
+# Run Bandit (static analysis) and Safety (dependency scan)
+python scripts/run_security_checks.py
+```
+
+You can wire these commands into CI or local pre-commit hooks to keep the service robust as the codebase grows.
+
 **LAN access:**
 Open `http://<your-LAN-IP>:8420` from any device on the network.
 

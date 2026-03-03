@@ -107,12 +107,11 @@ async def lifespan(app: FastAPI):
     # Initialize personal cloud manager
     cloud_manager = PersonalCloudManager()
 
-    # Initialize scheduler
+    # Initialize scheduler (manual start via API/UI)
     scheduler = EmailScheduler(db, settings)
     if settings.scheduler.enabled:
-        scheduler.start()
-        logger.info("Email scheduler started")
-
+        logger.info("Scheduler initialized; start manually via API/UI")
+    
     # Save config (creates default if first run)
     save_config(settings)
 
@@ -190,6 +189,7 @@ app.add_middleware(
 # === Register Routes ===
 
 from app.routes import settings, emails, documents, search, agent, files  # noqa: E402
+from app.routes import scheduler_control  # noqa: E402
 from app.routes import auth as auth_routes  # noqa: E402
 from app.routes import cloud_storage as cloud_routes  # noqa: E402
 from app.routes import rules as rules_routes  # noqa: E402
@@ -204,6 +204,7 @@ app.include_router(files.router)
 app.include_router(cloud_routes.router)
 app.include_router(cloud_routes.oauth_router)
 app.include_router(rules_routes.router)
+app.include_router(scheduler_control.router)
 
 
 # === Serve Built Frontend (fixes 404 on /) ===
