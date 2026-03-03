@@ -4,13 +4,13 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import ReviewQueuePage from '../ReviewQueuePage';
 
-const apiMocks = {
+const apiMocks = vi.hoisted(() => ({
   getReviewQueue: vi.fn(),
   approveEmail: vi.fn(),
   rejectEmail: vi.fn(),
   archiveEmail: vi.fn(),
   captureLink: vi.fn(),
-};
+}));
 
 vi.mock('../../lib/api', () => ({
   __esModule: true,
@@ -60,7 +60,7 @@ describe('ReviewQueuePage', () => {
     await user.click(row);
 
     expect(await screen.findByText(/Approve/)).toBeInTheDocument();
-    expect(screen.getByText(/Acme Billing/)).toBeInTheDocument();
+    expect(screen.getAllByText(/Acme Billing/)[0]).toBeInTheDocument();
   });
 
   it('calls approveEmail when approving selected item', async () => {
@@ -73,4 +73,6 @@ describe('ReviewQueuePage', () => {
     const approveButton = await screen.findByRole('button', { name: /approve/i });
     await user.click(approveButton);
 
-    expect(apiMocks.approv
+    expect(apiMocks.approveEmail).toHaveBeenCalledWith(1);
+  });
+});

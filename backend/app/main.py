@@ -222,6 +222,8 @@ def _find_frontend_dist(settings=None) -> Path | None:
         backend_dir / "frontend" / "dist",
         Path.cwd().parent / "frontend" / "dist",
         Path.cwd() / ".." / "frontend" / "dist",
+        Path(getattr(sys, "_MEIPASS", backend_dir)) / "frontend-dist",
+        Path(sys.executable).resolve().parent / "frontend-dist",
     ]
     for c in candidates:
         c = c.resolve()

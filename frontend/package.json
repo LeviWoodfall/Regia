@@ -14,7 +14,9 @@
     "test:coverage": "vitest run --coverage",
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
-    "tauri:build": "tauri build"
+    "tauri:build": "tauri build",
+    "desktop:backend": "powershell -ExecutionPolicy Bypass -File ..\\scripts\\build_desktop_backend.ps1",
+    "desktop:build": "npm run desktop:backend && powershell -NoProfile -Command \"if (Test-Path .\\src-tauri\\target) { Remove-Item .\\src-tauri\\target -Recurse -Force }\" && tauri build"
   },
   "dependencies": {
     "axios": "^1.9.0",
@@ -37,6 +39,7 @@
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^5.1.1",
     "autoprefixer": "^10.4.21",
+    "cross-env": "^10.1.0",
     "eslint": "^9.39.1",
     "eslint-plugin-react-hooks": "^7.0.1",
     "eslint-plugin-react-refresh": "^0.4.24",

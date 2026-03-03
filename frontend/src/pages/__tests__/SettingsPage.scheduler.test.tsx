@@ -4,7 +4,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import SettingsPage from '../SettingsPage';
 
-const apiMocks = {
+const apiMocks = vi.hoisted(() => ({
   getStatus: vi.fn(),
   setupMasterPassword: vi.fn(),
   apiUnlock: vi.fn(),
@@ -33,7 +33,7 @@ const apiMocks = {
   schedulerStart: vi.fn(),
   schedulerStop: vi.fn(),
   schedulerStatus: vi.fn(),
-};
+}));
 
 vi.mock('../../lib/api', () => ({
   __esModule: true,
@@ -104,7 +104,7 @@ describe('SettingsPage Scheduler Tab', () => {
   });
 
   it('renders scheduler jobs returned from API', async () => {
-    apiMocks.schedulerStatus.mockResolvedValueOnce({
+    apiMocks.schedulerStatus.mockResolvedValue({
       data: {
         running: true,
         jobs: [
@@ -125,6 +125,10 @@ describe('SettingsPage Scheduler Tab', () => {
     const schedulerTab = await screen.findByRole('button', { name: /scheduler/i });
     await userEvent.click(schedulerTab);
 
+    const refreshButton = await screen.findByRole('button', { name: /refresh status/i });
+    await userEvent.click(refreshButton);
+
+    await waitFor(() => expect(apiMocks.schedulerStatus).toHaveBeenCalled());
     await screen.findByText(/fetch primary/i);
     expect(screen.getByText(/account: acct-1/i)).toBeInTheDocument();
     expect(screen.getByText(/runs: 3/i)).toBeInTheDocument();

@@ -8,6 +8,9 @@
 - Playwright-based link capture: `POST /api/emails/{id}/capture-link` prints links to PDF headlessly and saves into the ingestion path with Reggie processing.
 - Inline attachment/document previews via `GET /api/documents/{id}/preview` (PDF/image) in Emails and Documents pages.
 - UI controls: per-email refresh files, link preview + print-to-PDF, global refresh-all attachments in Settings.
+- **Testing**: Vitest suites for Sidebar, Settings (scheduler + appearance), and Review Queue; Playwright smoke test seeds dev login, signs in, and navigates to Review Queue.
+- **Documentation**: Added `/docs` hub covering Admin, Developer, User Journey, Troubleshooting, and Style guides plus `scripts/check_docs.py` gate.
+- **CI**: Introduced GitHub Actions workflow running backend pytest + security scans, frontend Vitest + Playwright, and docs lint in parallel.
 
 ### Fixed / Improved
 - **Critical**: Download-all endpoints (`/documents/email/{id}/download-all`, `/documents/download-all`) used wrong dependency (`get_db` instead of `get_settings`) — caused server crash on any download-all request.
@@ -19,6 +22,7 @@
 - Settings routes: `start_ingest_date` included in account list response, create, and update.
 - API timeout increased from 30s to 120s for long-running operations.
 - Preview endpoint streams PNG bytes (no temp files).
+- README expanded with documentation hub, deterministic dev login instructions, and CI/testing matrix documentation.
 
 ### Dependencies
 - Added Playwright (Chromium installed via `python -m playwright install chromium`).

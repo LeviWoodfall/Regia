@@ -8,6 +8,18 @@ The built-in AI assistant **Reggie** can search across your entire document arch
 
 ---
 
+## Documentation Hub
+
+Comprehensive role-based guides live under [`docs/`](docs/README.md):
+
+- [Admin & Operations Guide](docs/admin-guide.md)
+- [Developer Handbook](docs/developer-guide.md)
+- [User Journey Guide](docs/user-guide.md)
+- [Logging & Troubleshooting](docs/troubleshooting.md)
+- [Documentation Style Guide](docs/doc-style.md)
+
+Every feature PR must update the relevant guides plus this README and the [CHANGELOG](CHANGELOG.md).
+
 ## Features
 
 ### Core
@@ -123,20 +135,57 @@ Opens at **http://localhost:5173** with hot reload (proxies API to the backend).
 
 ### Tests & Security Checks
 
-Regia now ships with backend pytest coverage plus automated security scanning hooks. To run them from the `backend/` directory:
+Regia ships with full-stack automated tests plus static analysis. Run them before every commit:
+
+#### Backend (from `backend/`)
 
 ```bash
 pip install -r requirements.txt
 pip install -r requirements-dev.txt
-
-# Run backend tests
-pytest
-
-# Run Bandit (static analysis) and Safety (dependency scan)
-python scripts/run_security_checks.py
+pytest                      # unit + integration tests
+python scripts/run_security_checks.py  # Bandit + Safety
 ```
 
+#### Frontend (from `frontend/`)
+
+```bash
+npm install
+npm run test -- --run        # Vitest + React Testing Library
+npm run test:playwright      # Full login + Review Queue smoke test
+```
+
+#### Documentation lint (repo root)
+
+```bash
+python scripts/check_docs.py
+```
+
+> Playwright automatically seeds the deterministic dev login and boots both backend and frontend via the `webServer` config block.
+
 You can wire these commands into CI or local pre-commit hooks to keep the service robust as the codebase grows.
+
+### Dev Login for Automation
+
+A deterministic account keeps local smoke tests and CI stable. Seed or refresh it anytime:
+
+```bash
+python backend/scripts/create_dev_user.py --username dev --password DevPassword!123 \
+  --email dev@example.com --display-name "Dev User"
+```
+
+Remove or disable this user in production after CI completes.
+
+### Continuous Integration
+
+CI runs via `.github/workflows/ci.yml` on every push/PR:
+
+| Job | What it runs |
+| --- | --- |
+| `backend` | Installs Python deps, executes `pytest`, and `python scripts/run_security_checks.py` |
+| `frontend` | Installs Node + backend deps, runs `npm run test -- --run` and `npm run test:playwright` |
+| `docs` | Executes `python scripts/check_docs.py` to guarantee documentation freshness |
+
+Jobs run in parallel. All must pass before merging to `main`.
 
 **LAN access:**
 Open `http://<your-LAN-IP>:8420` from any device on the network.

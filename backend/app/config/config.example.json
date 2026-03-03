@@ -1,0 +1,32 @@
+{
+  "app_name": "Regia",
+  "agent_name": "Reggie",
+  "debug": false,
+  "host": "0.0.0.0",
+  "port": 8420,
+  "allow_lan_access": true,
+  "storage": {
+    "base_dir": "${APPDATA}\\Regia\\documents",
+    "folder_template": "{email}/{date}/{sender}/{subject}",
+    "sanitize_names": true
+  },
+  "llm": {
+    "provider": "ollama",
+    "model_name": "qwen2.5:0.5b",
+    "ollama_base_url": "http://localhost:11434"
+  },
+  "scheduler": {
+    "enabled": true,
+    "default_interval_minutes": 15
+  },
+  "auth": {
+    "enabled": true,
+    "username": "admin",
+    "require_login": true,
+    "setup_completed": false
+  },
+  "ui": {
+    "theme": "light",
+    "accent_color": "sunset"
+  }
+}
